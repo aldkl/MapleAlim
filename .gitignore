@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.py[cod]
+*.log
+.agents/
+AGENTS.md
+docs/conversation_backups/
+data/character_cache.json

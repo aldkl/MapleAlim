@@ -1,0 +1,68 @@
+{
+  "meta": {
+    "schemaVersion": 1,
+    "description": "주간 보스 자동 선택 프리셋. 보스 id는 data/boss_crystals.json의 id를 사용한다."
+  },
+  "presets": [
+    {
+      "id": "below_black_mage_solo",
+      "label": "검밑솔",
+      "description": "검은 마법사 아래 솔격 기준 12보스",
+      "party": 1,
+      "bossIds": [
+        "hard_magnus",
+        "chaos_papulatus",
+        "chaos_bloody_queen",
+        "chaos_vellum",
+        "hard_lotus",
+        "hard_damien",
+        "chaos_guardian_angel_slime",
+        "hard_lucid",
+        "hard_will",
+        "chaos_gloom",
+        "hard_verus_hilla",
+        "hard_dunkel"
+      ]
+    },
+    {
+      "id": "seren_kalos_adversary",
+      "label": "세칼대",
+      "description": "검밑솔에서 하드 매그너스, 카오스 블러디 퀸, 카오스 벨룸을 빼고 노말 세렌, 이지 칼로스, 이지 대적자를 추가",
+      "party": 1,
+      "bossIds": [
+        "chaos_papulatus",
+        "hard_lotus",
+        "hard_damien",
+        "chaos_guardian_angel_slime",
+        "hard_lucid",
+        "hard_will",
+        "chaos_gloom",
+        "hard_verus_hilla",
+        "hard_dunkel",
+        "normal_chosen_seren",
+        "easy_watcher_kalos",
+        "easy_first_adversary"
+      ]
+    },
+    {
+      "id": "hard_seren_easy_kalos",
+      "label": "하세이칼",
+      "description": "하드 세렌, 이지 칼로스 이후 12보스",
+      "party": 1,
+      "bossIds": [
+        "hard_chosen_seren",
+        "easy_watcher_kalos",
+        "normal_kaling",
+        "normal_limbo",
+        "hard_verus_hilla",
+        "hard_dunkel",
+        "hard_will",
+        "chaos_guardian_angel_slime",
+        "chaos_gloom",
+        "hard_lucid",
+        "hard_lotus",
+        "hard_damien"
+      ]
+    }
+  ]
+}

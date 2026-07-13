@@ -1,0 +1,159 @@
+import argparse
+import json
+import os
+import sys
+from datetime import date, timedelta
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+
+BASE_URL = "https://open.api.nexon.com/maplestory/v1"
+API_KEY_ENV = "NEXON_OPEN_API_KEY"
+
+
+class NexonApiError(RuntimeError):
+    pass
+
+
+def load_env_file(path=".env"):
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def request_json(path, params=None):
+    load_env_file()
+    api_key = os.environ.get(API_KEY_ENV)
+    if not api_key:
+        raise NexonApiError(f"{API_KEY_ENV} 환경변수를 먼저 설정해야 합니다.")
+
+    query = urlencode(params or {})
+    url = f"{BASE_URL}{path}"
+    if query:
+        url = f"{url}?{query}"
+
+    request = Request(url, headers={"x-nxopen-api-key": api_key})
+    try:
+        with urlopen(request, timeout=15) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            return json.loads(response.read().decode(charset))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise NexonApiError(f"NEXON API 오류 {exc.code}: {body}") from exc
+    except URLError as exc:
+        raise NexonApiError(f"NEXON API 연결 실패: {exc.reason}") from exc
+
+
+def get_ocid(character_name):
+    data = request_json("/id", {"character_name": character_name})
+    ocid = data.get("ocid")
+    if not ocid:
+        raise NexonApiError(f"ocid를 찾지 못했습니다: {character_name}")
+    return ocid
+
+
+def get_character_basic(ocid, lookup_date=None):
+    params = {"ocid": ocid}
+    if lookup_date:
+        params["date"] = lookup_date
+    return request_json("/character/basic", params)
+
+
+def get_character_list():
+    data = request_json("/character/list")
+    account_list = data.get("account_list")
+    return account_list if isinstance(account_list, list) else []
+
+
+def find_character_account(ocid):
+    for account in get_character_list():
+        account_id = account.get("account_id")
+        characters = account.get("character_list") or []
+        for character in characters:
+            if character.get("ocid") == ocid:
+                return {
+                    "account_id": account_id,
+                    "account_character_count": len(characters),
+                }
+    return {
+        "account_id": None,
+        "account_character_count": None,
+    }
+
+
+def get_character_summary(character_name, lookup_date=None):
+    ocid = get_ocid(character_name)
+    basic = get_character_basic(ocid, lookup_date)
+    account = find_character_account(ocid)
+    return {
+        "ocid": ocid,
+        "account_id": account.get("account_id"),
+        "account_character_count": account.get("account_character_count"),
+        "date": basic.get("date", lookup_date),
+        "character_name": basic.get("character_name", character_name),
+        "world_name": basic.get("world_name"),
+        "character_class": basic.get("character_class"),
+        "character_class_level": basic.get("character_class_level"),
+        "character_level": basic.get("character_level"),
+        "character_exp_rate": basic.get("character_exp_rate"),
+        "character_guild_name": basic.get("character_guild_name"),
+        "character_image": basic.get("character_image"),
+    }
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="NEXON Open API에서 메이플스토리 캐릭터 기본 정보를 가져옵니다."
+    )
+    parser.add_argument("character_name", help="조회할 캐릭터명")
+    parser.add_argument(
+        "--date",
+        default=(date.today() - timedelta(days=1)).isoformat(),
+        help="조회 기준일 YYYY-MM-DD. 기본값은 어제입니다.",
+    )
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="API 응답 JSON 전체를 출력합니다.",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    try:
+        summary = get_character_summary(args.character_name, args.date)
+    except NexonApiError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    if args.raw:
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"캐릭터명: {summary.get('character_name', args.character_name)}")
+    print(f"월드: {summary.get('world_name', '-')}")
+    print(f"직업: {summary.get('character_class', '-')}")
+    print(f"레벨: {summary.get('character_level', '-')}")
+    print(f"경험치: {summary.get('character_exp_rate', '-')}%")
+    print(f"길드: {summary.get('character_guild_name') or '-'}")
+    print(f"조회일: {summary.get('date', args.date)}")
+    print(f"ocid: {summary.get('ocid')}")
+    print(f"account_id: {summary.get('account_id') or '-'}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
