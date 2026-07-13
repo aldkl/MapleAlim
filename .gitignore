@@ -6,3 +6,6 @@ __pycache__/
 AGENTS.md
 docs/conversation_backups/
 data/character_cache.json
+
+.vercel
+.env*
