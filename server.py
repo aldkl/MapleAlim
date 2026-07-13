@@ -17,6 +17,7 @@ APP_ROUTES = {
     "/todo",
     "/hunting-profit",
     "/calendar",
+    "/goals",
     "/alarm",
 }
 
