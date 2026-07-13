@@ -1438,6 +1438,13 @@
       font: inherit;
     }
 
+    .goal-input-preview {
+      min-height: 18px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
     .goal-hint {
       color: var(--muted);
       font-size: 12px;
@@ -2137,7 +2144,7 @@
               <label class="goal-field">
                 <span>목표 유형</span>
                 <select id="goalType">
-                  <option value="experience">경험치</option>
+                  <option value="level">레벨</option>
                   <option value="meso">메소</option>
                 </select>
               </label>
@@ -2146,22 +2153,25 @@
                 <input id="goalTitle" type="text" maxlength="40" placeholder="예: 다음 레벨까지, 장비 구매 자금" autocomplete="off">
               </label>
               <label class="goal-field">
-                <span id="goalCurrentLabel">현재 경험치</span>
-                <input id="goalCurrent" type="number" min="0" step="1" placeholder="0" required>
+                <span id="goalCurrentLabel">현재 레벨</span>
+                <input id="goalCurrent" type="number" min="0" step="any" placeholder="285.35" required>
+                <div class="goal-input-preview" id="goalCurrentPreview">예: 285.35 = Lv.285의 35%</div>
               </label>
               <label class="goal-field">
-                <span id="goalTargetLabel">목표 경험치</span>
-                <input id="goalTarget" type="number" min="1" step="1" placeholder="0" required>
+                <span id="goalTargetLabel">목표 레벨</span>
+                <input id="goalTarget" type="number" min="0" step="any" placeholder="290" required>
+                <div class="goal-input-preview" id="goalTargetPreview">목표 레벨을 입력하세요.</div>
               </label>
               <label class="goal-field">
-                <span id="goalDailyLabel">하루 예상 경험치</span>
-                <input id="goalDaily" type="number" min="1" step="1" placeholder="0" required>
+                <span id="goalDailyLabel">하루 평균 레벨 상승량</span>
+                <input id="goalDaily" type="number" min="0" step="any" placeholder="0.12" required>
+                <div class="goal-input-preview" id="goalDailyPreview">예: 하루 12%면 0.12 입력</div>
               </label>
               <label class="goal-field">
                 <span>계산 시작일</span>
                 <input id="goalStartDate" type="date" required>
               </label>
-              <div class="goal-hint">현재는 하루 평균 획득량이 일정하다고 가정합니다. 실제 플레이 기록 및 API 자동 연동은 다음 단계에서 붙일 수 있습니다.</div>
+              <div class="goal-hint" id="goalHint">레벨의 소수 부분을 현재 경험치 진행률로 보고 하루 평균 상승량이 일정하다고 가정한 간이 계산입니다.</div>
               <button class="button primary" type="submit">예상 달성일 계산·저장</button>
               <div class="goal-preview" id="goalPreview">값을 입력하면 예상 달성일을 계산해 목표로 저장합니다.</div>
             </form>
@@ -2250,7 +2260,7 @@
       },
       goals: {
         title: "목표 설정",
-        caption: "경험치나 메소 목표까지 필요한 기간과 예상 달성일을 계산합니다.",
+        caption: "목표 레벨이나 메소까지 필요한 기간과 예상 달성일을 계산합니다.",
       },
       alarm: {
         title: "알리미",
@@ -2324,6 +2334,10 @@
       goalCurrentLabel: document.querySelector("#goalCurrentLabel"),
       goalTargetLabel: document.querySelector("#goalTargetLabel"),
       goalDailyLabel: document.querySelector("#goalDailyLabel"),
+      goalCurrentPreview: document.querySelector("#goalCurrentPreview"),
+      goalTargetPreview: document.querySelector("#goalTargetPreview"),
+      goalDailyPreview: document.querySelector("#goalDailyPreview"),
+      goalHint: document.querySelector("#goalHint"),
       goalPreview: document.querySelector("#goalPreview"),
       goalList: document.querySelector("#goalList"),
       goalMeta: document.querySelector("#goalMeta"),
@@ -2534,8 +2548,22 @@
     }
 
     function formatGoalValue(type, value) {
-      const amount = Math.max(0, Math.round(Number(value) || 0));
-      return type === "meso" ? formatMeso(amount) : `${amount.toLocaleString("ko-KR")} 경험치`;
+      const amount = Math.max(0, Number(value) || 0);
+      if (type === "meso") {
+        return formatMeso(amount);
+      }
+      if (type === "level") {
+        return `Lv.${amount.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}`;
+      }
+      return `${Math.round(amount).toLocaleString("ko-KR")} 경험치`;
+    }
+
+    function formatGoalDelta(type, value) {
+      const amount = Math.max(0, Number(value) || 0);
+      if (type === "level") {
+        return `${amount.toLocaleString("ko-KR", { maximumFractionDigits: 4 })} 레벨`;
+      }
+      return formatGoalValue(type, amount);
     }
 
     function formatGoalDate(dateKey) {
@@ -3101,10 +3129,47 @@
     }
 
     function updateGoalUnitLabels() {
-      const unit = els.goalType.value === "meso" ? "메소" : "경험치";
-      els.goalCurrentLabel.textContent = `현재 ${unit}`;
-      els.goalTargetLabel.textContent = `목표 ${unit}`;
-      els.goalDailyLabel.textContent = `하루 예상 ${unit}`;
+      const isMeso = els.goalType.value === "meso";
+      els.goalCurrentLabel.textContent = isMeso ? "현재 메소 (억 단위)" : "현재 레벨";
+      els.goalTargetLabel.textContent = isMeso ? "목표 메소 (억 단위)" : "목표 레벨";
+      els.goalDailyLabel.textContent = isMeso ? "하루 예상 메소 (억 단위)" : "하루 평균 레벨 상승량";
+      els.goalCurrent.placeholder = isMeso ? "1.3" : "285.35";
+      els.goalTarget.placeholder = isMeso ? "10" : "290";
+      els.goalDaily.placeholder = isMeso ? "0.5" : "0.12";
+      els.goalHint.textContent = isMeso
+        ? "입력 단위는 억 메소입니다. 1.3을 입력하면 1억 3천만 메소로 계산합니다."
+        : "레벨의 소수 부분을 현재 경험치 진행률로 보고 하루 평균 상승량이 일정하다고 가정한 간이 계산입니다.";
+      updateGoalInputPreviews();
+    }
+
+    function formatMesoInputPreview(value) {
+      const eok = Number(value);
+      if (!Number.isFinite(eok) || eok < 0 || value === "") {
+        return "억 단위로 입력하세요. 예: 1.3억 → 1.3";
+      }
+      const meso = Math.round(eok * 100000000);
+      return `${eok.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}억 · ${meso.toLocaleString("ko-KR")} 메소`;
+    }
+
+    function updateGoalInputPreviews() {
+      if (els.goalType.value === "meso") {
+        els.goalCurrentPreview.textContent = formatMesoInputPreview(els.goalCurrent.value);
+        els.goalTargetPreview.textContent = formatMesoInputPreview(els.goalTarget.value);
+        els.goalDailyPreview.textContent = `${formatMesoInputPreview(els.goalDaily.value)} / 일`;
+        return;
+      }
+      const current = Number(els.goalCurrent.value);
+      const target = Number(els.goalTarget.value);
+      const daily = Number(els.goalDaily.value);
+      els.goalCurrentPreview.textContent = Number.isFinite(current) && els.goalCurrent.value !== ""
+        ? `Lv.${current.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}`
+        : "예: 285.35 = Lv.285의 35%";
+      els.goalTargetPreview.textContent = Number.isFinite(target) && els.goalTarget.value !== ""
+        ? `Lv.${target.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}`
+        : "목표 레벨을 입력하세요.";
+      els.goalDailyPreview.textContent = Number.isFinite(daily) && els.goalDaily.value !== ""
+        ? `하루 약 ${(daily * 100).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}% 레벨 상승`
+        : "예: 하루 12%면 0.12 입력";
     }
 
     function renderGoalCard(goal) {
@@ -3112,7 +3177,7 @@
       const target = Math.max(0, Number(goal.target) || 0);
       const current = Math.max(0, Number(goal.current) || 0);
       const progress = target ? Math.min(100, Math.max(0, (current / target) * 100)) : 0;
-      const typeLabel = goal.type === "meso" ? "메소" : "경험치";
+      const typeLabel = goal.type === "meso" ? "메소" : goal.type === "level" ? "레벨" : "경험치(이전 방식)";
       const result = projection.days === null
         ? "하루 예상 획득량을 확인해 주세요."
         : projection.days === 0
@@ -3138,7 +3203,7 @@
             </div>
             <div class="goal-stat">
               <div class="goal-stat-label">하루 예상</div>
-              <div class="goal-stat-value">${formatGoalValue(goal.type, goal.daily)}</div>
+              <div class="goal-stat-value">${formatGoalDelta(goal.type, goal.daily)}</div>
             </div>
           </div>
           <div class="goal-progress-track" aria-label="목표 진행률 ${Math.round(progress)}%">
@@ -3146,7 +3211,7 @@
           </div>
           <div class="goal-card-footer">
             <div class="goal-result">${result}</div>
-            <div class="goal-card-meta">남은 양 ${formatGoalValue(goal.type, projection.remaining)}</div>
+            <div class="goal-card-meta">남은 양 ${formatGoalDelta(goal.type, projection.remaining)}</div>
           </div>
         </article>
       `;
@@ -3972,14 +4037,42 @@
       deleteCharacter(deleteButton.dataset.deleteCharacter);
     });
 
-    els.goalType.addEventListener("change", updateGoalUnitLabels);
+    els.goalType.addEventListener("change", () => {
+      els.goalCurrent.value = "";
+      els.goalTarget.value = "";
+      els.goalDaily.value = "";
+      updateGoalUnitLabels();
+      if (els.goalType.value === "level") {
+        const character = state.characters.find((item) => item.ocid === els.goalCharacter.value);
+        if (character?.character_level) {
+          els.goalCurrent.value = character.character_level;
+          updateGoalInputPreviews();
+        }
+      }
+    });
+
+    els.goalCharacter.addEventListener("change", () => {
+      if (els.goalType.value !== "level") {
+        return;
+      }
+      const character = state.characters.find((item) => item.ocid === els.goalCharacter.value);
+      if (character?.character_level) {
+        els.goalCurrent.value = character.character_level;
+        updateGoalInputPreviews();
+      }
+    });
+
+    [els.goalCurrent, els.goalTarget, els.goalDaily].forEach((input) => {
+      input.addEventListener("input", updateGoalInputPreviews);
+    });
 
     els.goalForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      const type = els.goalType.value === "meso" ? "meso" : "experience";
-      const current = Number(els.goalCurrent.value);
-      const target = Number(els.goalTarget.value);
-      const daily = Number(els.goalDaily.value);
+      const type = els.goalType.value === "meso" ? "meso" : "level";
+      const unitMultiplier = type === "meso" ? 100000000 : 1;
+      const current = Number(els.goalCurrent.value) * unitMultiplier;
+      const target = Number(els.goalTarget.value) * unitMultiplier;
+      const daily = Number(els.goalDaily.value) * unitMultiplier;
       const startDate = els.goalStartDate.value || getTodayKey();
       if (![current, target, daily].every(Number.isFinite) || current < 0 || target <= 0 || daily <= 0) {
         els.goalPreview.textContent = "현재값은 0 이상, 목표값과 하루 예상 획득량은 0보다 크게 입력해 주세요.";
@@ -3987,7 +4080,7 @@
       }
 
       const character = state.characters.find((item) => item.ocid === els.goalCharacter.value);
-      const typeLabel = type === "meso" ? "메소" : "경험치";
+      const typeLabel = type === "meso" ? "메소" : "레벨";
       const goal = {
         id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         characterId: character?.ocid || "",
@@ -4013,6 +4106,7 @@
       els.goalCurrent.value = "";
       els.goalTarget.value = "";
       els.goalDaily.value = "";
+      updateGoalInputPreviews();
     });
 
     els.goalList.addEventListener("click", (event) => {
