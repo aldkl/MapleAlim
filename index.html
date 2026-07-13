@@ -413,6 +413,33 @@
       white-space: nowrap;
     }
 
+    .character-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .character-delete-button {
+      min-height: 30px;
+      border: 1px solid rgba(200, 70, 58, 0.32);
+      border-radius: 7px;
+      background: #fff7f6;
+      color: var(--danger);
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .character-delete-button:hover,
+    .character-delete-button:focus-visible {
+      border-color: var(--danger);
+      background: #fff0ee;
+      outline: none;
+    }
+
     .todo-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2924,11 +2951,43 @@
             <div class="cell-label">선택 보스</div>
             <div class="cell-value">${bossIncome.count}개</div>
           </div>
-          <div>
+          <div class="character-actions">
             <span class="status-pill">API 연동</span>
+            <button class="character-delete-button" type="button" data-delete-character="${escapeHtml(character.ocid)}" aria-label="${escapeHtml(character.character_name || "캐릭터")} 삭제">삭제</button>
           </div>
         </article>
       `;
+    }
+
+    function deleteCharacter(characterId) {
+      const character = state.characters.find((item) => item.ocid === characterId);
+      if (!character) {
+        return;
+      }
+
+      const characterName = character.character_name || "캐릭터";
+      const confirmed = window.confirm(`${characterName} 캐릭터를 삭제할까요?\n보스 설정과 TODO 기록도 함께 삭제됩니다.`);
+      if (!confirmed) {
+        return;
+      }
+
+      state.characters = state.characters.filter((item) => item.ocid !== characterId);
+      delete state.bossPlans[characterId];
+      Object.values(state.todos.done).forEach((bucket) => {
+        if (bucket && typeof bucket === "object") {
+          delete bucket[characterId];
+        }
+      });
+      delete state.todos.excluded[characterId];
+      if (state.activeCharacterId === characterId) {
+        state.activeCharacterId = state.characters[0]?.ocid || "";
+      }
+
+      saveCharacters();
+      saveBossPlans();
+      saveTodos();
+      render();
+      setMessage(`${characterName} 캐릭터와 연결된 설정을 삭제했습니다.`);
     }
 
     function renderEmpty() {
@@ -3549,6 +3608,14 @@
       } finally {
         setLoading(false);
       }
+    });
+
+    els.list.addEventListener("click", (event) => {
+      const deleteButton = event.target.closest("[data-delete-character]");
+      if (!deleteButton) {
+        return;
+      }
+      deleteCharacter(deleteButton.dataset.deleteCharacter);
     });
 
     els.bossSelect.addEventListener("change", () => {
