@@ -447,6 +447,57 @@
       padding: 16px;
     }
 
+    .account-todo-grid {
+      display: none;
+    }
+
+    .account-todo-card {
+      border: 1px solid rgba(44, 107, 237, 0.28);
+      border-radius: 8px;
+      background: #f7faff;
+      overflow: hidden;
+    }
+
+    .account-todo-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(44, 107, 237, 0.18);
+      background: #eef4ff;
+    }
+
+    .account-todo-title {
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .account-todo-caption,
+    .epic-dungeon-note {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+
+    .account-todo-sections {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .epic-dungeon-item.locked {
+      background: #f1f3f6;
+      color: var(--muted);
+      opacity: 0.7;
+    }
+
+    .epic-dungeon-item.locked input {
+      cursor: not-allowed;
+    }
+
     .todo-card {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -1729,6 +1780,10 @@
         grid-template-columns: 1fr;
       }
 
+      .account-todo-sections {
+        grid-template-columns: 1fr;
+      }
+
       .boss-row {
         grid-template-columns: 32px minmax(150px, 1fr) minmax(210px, 1.2fr) 72px 120px;
       }
@@ -1997,8 +2052,9 @@
             </div>
           </div>
           <div class="placeholder">
-            보스 설정에서 선택한 보스는 실제 처치 체크 항목으로 자동 표시됩니다. 일퀘는 매일, 주간퀘와 보스는 주 단위로 초기화됩니다.
+            계정 전용 숙제는 같은 메이플 계정에서 공유됩니다. 에픽던전은 각 캐릭터의 주간퀘에 표시되며 캐릭터별로 하나만 선택할 수 있습니다.
           </div>
+          <div class="account-todo-grid" id="accountTodoGrid"></div>
           <div class="todo-grid" id="todoGrid"></div>
         </div>
       </section>
@@ -2313,6 +2369,7 @@
       allBossEditor: document.querySelector("#allBossEditor"),
       allBossMeta: document.querySelector("#allBossMeta"),
       todoGrid: document.querySelector("#todoGrid"),
+      accountTodoGrid: document.querySelector("#accountTodoGrid"),
       todoMeta: document.querySelector("#todoMeta"),
       calendarGrid: document.querySelector("#calendarGrid"),
       calendarTitle: document.querySelector("#calendarTitle"),
@@ -2347,14 +2404,32 @@
     const DEFAULT_DAILY_TODOS = [
       { id: "daily_symbol", label: "일일 심볼" },
       { id: "daily_monster_park", label: "몬스터파크" },
-      { id: "daily_event", label: "이벤트 일퀘" },
     ];
 
     const DEFAULT_WEEKLY_TODOS = [
       { id: "weekly_symbol", label: "주간 심볼" },
-      { id: "nightmare_frontier", label: "악몽 선경" },
-      { id: "anglers_company", label: "앵글러 컴퍼니" },
-      { id: "weekly_event", label: "이벤트 주간" },
+    ];
+
+    const ACCOUNT_DAILY_TODOS = [
+      { id: "maple_m_mileage", label: "메이플M (마일리지 750)" },
+      { id: "union_coin", label: "유니온 코인 받기" },
+    ];
+
+    const ACCOUNT_EVENT_TODOS = [
+      { id: "specter_blast", label: "스펙터 블래스트" },
+      { id: "etherion_artifact", label: "에테리온 아티팩트 수집" },
+      { id: "training_journal", label: "훈련 일지 (보약)" },
+      { id: "challengers_pass", label: "챌린져스 패스" },
+      { id: "boss_coin_exp_coupon", label: "보스 코인샵 · 경쿠 4배" },
+      { id: "challengers_coin_exp_coupon", label: "첼린져스 코인샵 · 경쿠 3배 7개" },
+      { id: "boss_coin_black_cube", label: "보스 코인샵 · 블랙 큐브" },
+      { id: "boss_coin_white_cube", label: "보스 코인샵 · 화이트 큐브" },
+    ];
+
+    const EPIC_DUNGEONS = [
+      { id: "high_mountain", label: "하이마운틴", minLevel: 260 },
+      { id: "anglers_company", label: "앵글러 컴퍼니", minLevel: 270 },
+      { id: "nightmare_paradise", label: "악몽선경", minLevel: 280 },
     ];
 
     function readCharacters() {
@@ -2431,6 +2506,7 @@
         weeklyKey: getWeekKey(),
         monthlyKey: getMonthKey(),
         done: { daily: {}, weekly: {}, bosses: {}, monthlyBosses: {} },
+        accountDone: { daily: {}, weekly: {}, epicDungeon: {} },
         excluded: {},
       };
     }
@@ -2448,6 +2524,10 @@
       todos.done.weekly = todos.done.weekly && typeof todos.done.weekly === "object" ? todos.done.weekly : {};
       todos.done.bosses = todos.done.bosses && typeof todos.done.bosses === "object" ? todos.done.bosses : {};
       todos.done.monthlyBosses = todos.done.monthlyBosses && typeof todos.done.monthlyBosses === "object" ? todos.done.monthlyBosses : {};
+      todos.accountDone = todos.accountDone && typeof todos.accountDone === "object" ? todos.accountDone : {};
+      todos.accountDone.daily = todos.accountDone.daily && typeof todos.accountDone.daily === "object" ? todos.accountDone.daily : {};
+      todos.accountDone.weekly = todos.accountDone.weekly && typeof todos.accountDone.weekly === "object" ? todos.accountDone.weekly : {};
+      todos.accountDone.epicDungeon = todos.accountDone.epicDungeon && typeof todos.accountDone.epicDungeon === "object" ? todos.accountDone.epicDungeon : {};
       todos.excluded = todos.excluded && typeof todos.excluded === "object" && !Array.isArray(todos.excluded) ? todos.excluded : {};
       Object.values(todos.excluded).forEach((entry) => {
         if (entry && typeof entry === "object" && !entry.tasks) {
@@ -2457,11 +2537,14 @@
       if (todos.dailyDate !== getTodayKey()) {
         todos.dailyDate = getTodayKey();
         todos.done.daily = {};
+        todos.accountDone.daily = {};
       }
       if (todos.weeklyKey !== getWeekKey()) {
         todos.weeklyKey = getWeekKey();
         todos.done.weekly = {};
         todos.done.bosses = {};
+        todos.accountDone.weekly = {};
+        todos.accountDone.epicDungeon = {};
       }
       if (todos.monthlyKey !== getMonthKey()) {
         todos.monthlyKey = getMonthKey();
@@ -2892,6 +2975,43 @@
       return state.todos.done[type][characterId];
     }
 
+    function getAccountTodoKey(character) {
+      return character.account_id || `local-${character.ocid || character.character_name || "unknown"}`;
+    }
+
+    function getAccountTodoGroups() {
+      const groups = new Map();
+      state.characters.forEach((character) => {
+        const key = getAccountTodoKey(character);
+        if (!groups.has(key)) {
+          groups.set(key, { key, verified: Boolean(character.account_id), characters: [] });
+        }
+        groups.get(key).characters.push(character);
+      });
+      return [...groups.values()];
+    }
+
+    function getAccountTodoBucket(type, accountKey) {
+      if (!state.todos.accountDone[type][accountKey]) {
+        state.todos.accountDone[type][accountKey] = {};
+      }
+      return state.todos.accountDone[type][accountKey];
+    }
+
+    function setAccountTodoDone(type, accountKey, taskId, done) {
+      const bucket = getAccountTodoBucket(type, accountKey);
+      if (type === "epicDungeon" && done) {
+        Object.keys(bucket).forEach((id) => delete bucket[id]);
+      }
+      if (done) {
+        bucket[taskId] = true;
+      } else {
+        delete bucket[taskId];
+      }
+      saveTodos();
+      render();
+    }
+
     function getTodoExclusions(characterId) {
       if (!state.todos.excluded[characterId] || typeof state.todos.excluded[characterId] !== "object") {
         state.todos.excluded[characterId] = {};
@@ -2942,6 +3062,11 @@
 
     function setTodoDone(type, characterId, taskId, done) {
       const bucket = getTodoBucket(type, characterId);
+      if (type === "weekly" && done && taskId.startsWith("epic_dungeon_")) {
+        Object.keys(bucket).forEach((id) => {
+          if (id.startsWith("epic_dungeon_")) delete bucket[id];
+        });
+      }
       if (done) {
         bucket[taskId] = true;
       } else {
@@ -2955,6 +3080,11 @@
       tasks.forEach((task) => {
         const type = task.type || fallbackType;
         const bucket = getTodoBucket(type, characterId);
+        if (type === "weekly" && done && task.id.startsWith("epic_dungeon_")) {
+          Object.keys(bucket).forEach((id) => {
+            if (id.startsWith("epic_dungeon_")) delete bucket[id];
+          });
+        }
         if (done) {
           bucket[task.id] = true;
         } else {
@@ -2966,24 +3096,36 @@
     }
 
     function getCharacterTodoSummary(characterId) {
+      const character = state.characters.find((item) => item.ocid === characterId);
       const bossTodos = getSelectedBossTodos(characterId);
       const dailyTodos = DEFAULT_DAILY_TODOS.filter((task) => !isTodoTaskExcluded(characterId, "daily", task.id));
-      const weeklyTodos = DEFAULT_WEEKLY_TODOS.filter((task) => !isTodoTaskExcluded(characterId, "weekly", task.id));
+      const weeklyTodos = getCharacterWeeklyTodos(character).filter((task) => !isTodoTaskExcluded(characterId, "weekly", task.id));
+      const regularWeeklyTodos = weeklyTodos.filter((task) => !task.exclusiveGroup);
+      const epicDungeonTodos = weeklyTodos.filter((task) => task.exclusiveGroup === "epicDungeon");
       const activeBossTodos = bossTodos.filter((task) => !isTodoTaskExcluded(characterId, "bosses", task.id));
-      const total = dailyTodos.length + weeklyTodos.length + activeBossTodos.length;
+      const total = dailyTodos.length + regularWeeklyTodos.length + (epicDungeonTodos.length ? 1 : 0) + activeBossTodos.length;
       const done = dailyTodos.filter((task) => isTodoDone("daily", characterId, task.id)).length
-        + weeklyTodos.filter((task) => isTodoDone("weekly", characterId, task.id)).length
+        + regularWeeklyTodos.filter((task) => isTodoDone("weekly", characterId, task.id)).length
+        + (epicDungeonTodos.some((task) => isTodoDone("weekly", characterId, task.id)) ? 1 : 0)
         + activeBossTodos.filter((task) => isTodoDone(task.type, characterId, task.id)).length;
       return { done, total, percent: total ? Math.round((done / total) * 100) : 0 };
     }
 
     function getTodoSummary() {
-      return state.characters.reduce((summary, character) => {
+      const summary = state.characters.reduce((result, character) => {
         const item = getCharacterTodoSummary(character.ocid);
-        summary.done += item.done;
-        summary.total += item.total;
-        return summary;
+        result.done += item.done;
+        result.total += item.total;
+        return result;
       }, { done: 0, total: 0 });
+      getAccountTodoGroups().forEach((group) => {
+        const dailyBucket = getAccountTodoBucket("daily", group.key);
+        const weeklyBucket = getAccountTodoBucket("weekly", group.key);
+        summary.total += ACCOUNT_DAILY_TODOS.length + ACCOUNT_EVENT_TODOS.length;
+        summary.done += ACCOUNT_DAILY_TODOS.filter((task) => dailyBucket[task.id]).length;
+        summary.done += ACCOUNT_EVENT_TODOS.filter((task) => weeklyBucket[task.id]).length;
+      });
+      return summary;
     }
 
     function getCompletedBossIncome(characterId) {
@@ -3237,6 +3379,8 @@
       const todoType = task.type || type;
       const excluded = isTodoTaskExcluded(characterId, type, task.id);
       const checked = isTodoDone(todoType, characterId, task.id);
+      const exclusiveSelected = task.exclusiveGroup === "epicDungeon"
+        && Object.keys(getTodoBucket(todoType, characterId)).some((id) => id.startsWith("epic_dungeon_") && id !== task.id);
       const meta = task.meta || fallbackMeta;
       if (state.todoMode === "edit") {
         return `
@@ -3248,10 +3392,10 @@
         `;
       }
       return `
-        <label class="todo-item${checked ? " done" : ""}">
-          <input type="checkbox" data-todo-type="${escapeHtml(todoType)}" data-character-id="${escapeHtml(characterId)}" data-task-id="${escapeHtml(task.id)}"${checked ? " checked" : ""}>
+        <label class="todo-item${checked ? " done" : ""}${exclusiveSelected ? " epic-dungeon-item locked" : ""}">
+          <input type="checkbox" data-todo-type="${escapeHtml(todoType)}" data-character-id="${escapeHtml(characterId)}" data-task-id="${escapeHtml(task.id)}"${checked ? " checked" : ""}${exclusiveSelected ? " disabled" : ""}>
           <span class="todo-name">${escapeHtml(task.label)}</span>
-          <span class="todo-meta">${escapeHtml(meta)}</span>
+          <span class="todo-meta">${exclusiveSelected ? "다른 던전 선택됨" : escapeHtml(meta)}</span>
         </label>
       `;
     }
@@ -3300,6 +3444,7 @@
     function renderTodoCard(character) {
       const summary = getCharacterTodoSummary(character.ocid);
       const bossTodos = getSelectedBossTodos(character.ocid);
+      const weeklyTodos = getCharacterWeeklyTodos(character);
       return `
         <article class="todo-card" data-character-card-id="${escapeHtml(character.ocid)}">
           <div class="todo-card-header">
@@ -3314,7 +3459,59 @@
           <div class="todo-sections">
             ${renderTodoSection("보스 실제 처치", bossTodos, "주간 보스 설정에서 잡을 보스를 먼저 선택하세요.", "bosses", character.ocid, "보스")}
             ${renderTodoSection("일퀘", DEFAULT_DAILY_TODOS, "", "daily", character.ocid, "오늘")}
-            ${renderTodoSection("주간퀘", DEFAULT_WEEKLY_TODOS, "", "weekly", character.ocid, "이번 주")}
+            ${renderTodoSection("주간퀘", weeklyTodos, "", "weekly", character.ocid, "이번 주")}
+          </div>
+        </article>
+      `;
+    }
+
+    function getCharacterWeeklyTodos(character) {
+      const level = Number(character?.character_level) || 0;
+      const epicDungeons = EPIC_DUNGEONS
+        .filter((dungeon) => level >= dungeon.minLevel)
+        .map((dungeon) => ({
+          id: `epic_dungeon_${dungeon.id}`,
+          label: `${dungeon.label} (Lv.${dungeon.minLevel}+)`,
+          meta: "에픽던전 · 1개 선택",
+          exclusiveGroup: "epicDungeon",
+        }));
+      return [...DEFAULT_WEEKLY_TODOS, ...epicDungeons];
+    }
+
+    function renderAccountTodoItems(type, accountKey, tasks, meta) {
+      const bucket = getAccountTodoBucket(type, accountKey);
+      return tasks.map((task) => {
+        const checked = Boolean(bucket[task.id]);
+        return `
+          <label class="todo-item${checked ? " done" : ""}">
+            <input type="checkbox" data-account-todo-type="${escapeHtml(type)}" data-account-key="${escapeHtml(accountKey)}" data-task-id="${escapeHtml(task.id)}"${checked ? " checked" : ""}>
+            <span class="todo-name">${escapeHtml(task.label)}</span>
+            <span class="todo-meta">${escapeHtml(meta)}</span>
+          </label>
+        `;
+      }).join("");
+    }
+
+    function renderAccountTodoCard(group, index) {
+      const worlds = [...new Set(group.characters.map((character) => character.world_name).filter(Boolean))].join(" · ");
+      const label = group.verified ? `메이플 계정 ${index + 1}` : `${group.characters[0]?.character_name || "캐릭터"} 개별 계정`;
+      return `
+        <article class="account-todo-card">
+          <div class="account-todo-header">
+            <div>
+              <div class="account-todo-title">${escapeHtml(label)} · 계정 전용 TODO</div>
+              <div class="account-todo-caption">${escapeHtml(worlds || "월드 미확인")} · ${group.verified ? "같은 account_id 캐릭터끼리 완료 상태 공유" : "계정 정보 확인 전에는 다른 캐릭터와 공유하지 않음"}</div>
+            </div>
+          </div>
+          <div class="account-todo-sections">
+            <section class="todo-section">
+              <div class="todo-section-title"><span>일일 계정 숙제</span><span>매일 00:00</span></div>
+              <div class="todo-list">${renderAccountTodoItems("daily", group.key, ACCOUNT_DAILY_TODOS, "오늘")}</div>
+            </section>
+            <section class="todo-section">
+              <div class="todo-section-title"><span>이벤트</span><span>계정 공용</span></div>
+              <div class="todo-list">${renderAccountTodoItems("weekly", group.key, ACCOUNT_EVENT_TODOS, "이번 주")}</div>
+            </section>
           </div>
         </article>
       `;
@@ -3326,10 +3523,16 @@
         button.classList.toggle("active", button.dataset.todoMode === state.todoMode);
       });
       if (!state.characters.length) {
+        els.accountTodoGrid.innerHTML = "";
         els.todoGrid.innerHTML = `<div class="placeholder">캐릭터를 먼저 추가하면 TODO를 체크할 수 있습니다.</div>`;
         return;
       }
-      els.todoGrid.innerHTML = state.characters.map(renderTodoCard).join("");
+      const groups = getAccountTodoGroups();
+      els.accountTodoGrid.innerHTML = "";
+      els.todoGrid.innerHTML = groups.map((group, index) => [
+        renderAccountTodoCard(group, index),
+        ...group.characters.map(renderTodoCard),
+      ].join("")).join("");
     }
 
     function renderCharacter(character) {
@@ -4207,12 +4410,33 @@
     });
 
     els.todoGrid.addEventListener("change", (event) => {
+      if (event.target.matches("input[type='checkbox'][data-account-todo-type]")) {
+        setAccountTodoDone(
+          event.target.dataset.accountTodoType,
+          event.target.dataset.accountKey,
+          event.target.dataset.taskId,
+          event.target.checked,
+        );
+        return;
+      }
       if (!event.target.matches("input[type='checkbox'][data-todo-type]")) {
         return;
       }
       setTodoDone(
         event.target.dataset.todoType,
         event.target.dataset.characterId,
+        event.target.dataset.taskId,
+        event.target.checked,
+      );
+    });
+
+    els.accountTodoGrid.addEventListener("change", (event) => {
+      if (!event.target.matches("input[type='checkbox'][data-account-todo-type]")) {
+        return;
+      }
+      setAccountTodoDone(
+        event.target.dataset.accountTodoType,
+        event.target.dataset.accountKey,
         event.target.dataset.taskId,
         event.target.checked,
       );
