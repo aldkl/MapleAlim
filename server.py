@@ -19,6 +19,7 @@ APP_ROUTES = {
     "/calendar",
     "/goals",
     "/alarm",
+    "/updates",
 }
 
 

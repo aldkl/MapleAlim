@@ -1228,6 +1228,55 @@
       font-weight: 800;
     }
 
+    .updates-list {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .update-card {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 18px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .update-date {
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .update-version {
+      display: inline-flex;
+      margin-top: 7px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #eef4ff;
+      color: #2256bd;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .update-title {
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .update-items {
+      display: grid;
+      gap: 7px;
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+
     .calendar-toolbar {
       display: flex;
       align-items: center;
@@ -1851,6 +1900,11 @@
         align-items: flex-start;
         flex-direction: column;
       }
+
+      .update-card {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
     }
   </style>
 </head>
@@ -1871,6 +1925,7 @@
         <a class="nav-item" href="/weekly-boss" data-view="weekly-boss"><span>주간 보스</span><span class="nav-badge">계산</span></a>
         <a class="nav-item" href="/hunting-profit" data-view="hunting-profit"><span>사냥 수익 계산</span><span class="nav-badge">계산</span></a>
         <a class="nav-item" href="/alarm" data-view="alarm"><span>알리미</span><span class="nav-badge">서브</span></a>
+        <a class="nav-item" href="/updates" data-view="updates"><span>업데이트 내역</span><span class="nav-badge">NEW</span></a>
       </nav>
 
     </aside>
@@ -2259,6 +2314,57 @@
           </div>
         </div>
       </section>
+
+      <section class="view hidden" id="updatesView">
+        <div class="panel">
+          <div class="panel-header">
+            <h3 class="panel-title">업데이트 내역</h3>
+            <div class="panel-meta">최근 변경사항</div>
+          </div>
+          <div class="updates-list">
+            <article class="update-card">
+              <div>
+                <div class="update-date">2026.07.14</div>
+                <div class="update-version">dacfca8</div>
+              </div>
+              <div>
+                <div class="update-title">계정 TODO와 에픽던전 개선</div>
+                <ul class="update-items">
+                  <li>계정 전용 일퀘와 이벤트 체크를 캐릭터 카드 한 칸 크기로 추가했습니다.</li>
+                  <li>에픽던전은 캐릭터 레벨에 맞는 항목만 보이며 캐릭터당 하나를 선택할 수 있습니다.</li>
+                  <li>보스 코인샵과 첼린져스 코인샵 구매 항목을 추가했습니다.</li>
+                </ul>
+              </div>
+            </article>
+            <article class="update-card">
+              <div>
+                <div class="update-date">2026.07.14</div>
+                <div class="update-version">c07e0cf</div>
+              </div>
+              <div>
+                <div class="update-title">목표 설정 단위 개선</div>
+                <ul class="update-items">
+                  <li>소수 레벨로 현재 경험치 진행률과 목표 레벨을 입력할 수 있습니다.</li>
+                  <li>메소 목표는 억 메소 단위와 전체 메소 값을 함께 표시합니다.</li>
+                </ul>
+              </div>
+            </article>
+            <article class="update-card">
+              <div>
+                <div class="update-date">2026.07.13</div>
+                <div class="update-version">첫 공개</div>
+              </div>
+              <div>
+                <div class="update-title">메이플 플랜 공개</div>
+                <ul class="update-items">
+                  <li>GitHub Pages 프론트엔드와 Vercel 캐릭터 검색 API를 연결했습니다.</li>
+                  <li>캐릭터 정산, 주간 보스, TODO, 수익 캘린더를 공개했습니다.</li>
+                </ul>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
   <script src="./config.js"></script>
@@ -2288,6 +2394,7 @@
       calendar: "/calendar",
       goals: "/goals",
       alarm: "/alarm",
+      updates: "/updates",
     };
     const VIEW_META = {
       dashboard: {
@@ -2321,6 +2428,10 @@
       alarm: {
         title: "알리미",
         caption: "사냥 알림과 보조 알림을 관리하는 서브 서비스 화면입니다.",
+      },
+      updates: {
+        title: "업데이트 내역",
+        caption: "메이플 플랜에 새로 추가되거나 달라진 기능을 날짜별로 확인합니다.",
       },
     };
 
@@ -2364,6 +2475,7 @@
       calendarView: document.querySelector("#calendarView"),
       goalsView: document.querySelector("#goalsView"),
       alarmView: document.querySelector("#alarmView"),
+      updatesView: document.querySelector("#updatesView"),
       pageTitle: document.querySelector("#pageTitle"),
       pageCaption: document.querySelector("#pageCaption"),
       allBossEditor: document.querySelector("#allBossEditor"),
@@ -4172,6 +4284,7 @@
         calendar: els.calendarView,
         goals: els.goalsView,
         alarm: els.alarmView,
+        updates: els.updatesView,
       };
 
       Object.entries(viewEls).forEach(([key, element]) => {
