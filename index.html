@@ -698,6 +698,23 @@
       color: var(--danger);
     }
 
+    .todo-add-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .todo-add-input {
+      min-width: 0;
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 9px;
+      font: inherit;
+      font-size: 12px;
+    }
+
     .side-stack {
       display: grid;
       gap: 16px;
@@ -2619,6 +2636,8 @@
         monthlyKey: getMonthKey(),
         done: { daily: {}, weekly: {}, bosses: {}, monthlyBosses: {} },
         accountDone: { daily: {}, weekly: {}, epicDungeon: {} },
+        accountExcluded: {},
+        customAccountTodos: {},
         excluded: {},
       };
     }
@@ -2640,6 +2659,8 @@
       todos.accountDone.daily = todos.accountDone.daily && typeof todos.accountDone.daily === "object" ? todos.accountDone.daily : {};
       todos.accountDone.weekly = todos.accountDone.weekly && typeof todos.accountDone.weekly === "object" ? todos.accountDone.weekly : {};
       todos.accountDone.epicDungeon = todos.accountDone.epicDungeon && typeof todos.accountDone.epicDungeon === "object" ? todos.accountDone.epicDungeon : {};
+      todos.accountExcluded = todos.accountExcluded && typeof todos.accountExcluded === "object" && !Array.isArray(todos.accountExcluded) ? todos.accountExcluded : {};
+      todos.customAccountTodos = todos.customAccountTodos && typeof todos.customAccountTodos === "object" && !Array.isArray(todos.customAccountTodos) ? todos.customAccountTodos : {};
       todos.excluded = todos.excluded && typeof todos.excluded === "object" && !Array.isArray(todos.excluded) ? todos.excluded : {};
       Object.values(todos.excluded).forEach((entry) => {
         if (entry && typeof entry === "object" && !entry.tasks) {
@@ -3110,6 +3131,61 @@
       return state.todos.accountDone[type][accountKey];
     }
 
+    function getAccountTodoExclusionBucket(type, accountKey) {
+      if (!state.todos.accountExcluded[accountKey] || typeof state.todos.accountExcluded[accountKey] !== "object") {
+        state.todos.accountExcluded[accountKey] = {};
+      }
+      if (!state.todos.accountExcluded[accountKey][type] || typeof state.todos.accountExcluded[accountKey][type] !== "object") {
+        state.todos.accountExcluded[accountKey][type] = {};
+      }
+      return state.todos.accountExcluded[accountKey][type];
+    }
+
+    function getCustomAccountTodos(type, accountKey) {
+      if (!state.todos.customAccountTodos[accountKey] || typeof state.todos.customAccountTodos[accountKey] !== "object") {
+        state.todos.customAccountTodos[accountKey] = { daily: [], weekly: [] };
+      }
+      if (!Array.isArray(state.todos.customAccountTodos[accountKey][type])) {
+        state.todos.customAccountTodos[accountKey][type] = [];
+      }
+      return state.todos.customAccountTodos[accountKey][type];
+    }
+
+    function getAllAccountTodos(type, accountKey) {
+      const defaults = type === "daily" ? ACCOUNT_DAILY_TODOS : ACCOUNT_EVENT_TODOS;
+      return [...defaults, ...getCustomAccountTodos(type, accountKey)];
+    }
+
+    function toggleAccountTodoTask(type, accountKey, taskId) {
+      const bucket = getAccountTodoExclusionBucket(type, accountKey);
+      bucket[taskId] ? delete bucket[taskId] : bucket[taskId] = true;
+      saveTodos();
+      render();
+    }
+
+    function addCustomAccountTodo(type, accountKey, label) {
+      const cleanLabel = String(label || "").trim();
+      if (!cleanLabel) return;
+      getCustomAccountTodos(type, accountKey).push({
+        id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        label: cleanLabel,
+        custom: true,
+      });
+      saveTodos();
+      render();
+    }
+
+    function deleteCustomAccountTodo(type, accountKey, taskId) {
+      const tasks = getCustomAccountTodos(type, accountKey);
+      const index = tasks.findIndex((task) => task.id === taskId);
+      if (index < 0) return;
+      tasks.splice(index, 1);
+      delete getAccountTodoBucket(type, accountKey)[taskId];
+      delete getAccountTodoExclusionBucket(type, accountKey)[taskId];
+      saveTodos();
+      render();
+    }
+
     function setAccountTodoDone(type, accountKey, taskId, done) {
       const bucket = getAccountTodoBucket(type, accountKey);
       if (type === "epicDungeon" && done) {
@@ -3233,9 +3309,11 @@
       getAccountTodoGroups().forEach((group) => {
         const dailyBucket = getAccountTodoBucket("daily", group.key);
         const weeklyBucket = getAccountTodoBucket("weekly", group.key);
-        summary.total += ACCOUNT_DAILY_TODOS.length + ACCOUNT_EVENT_TODOS.length;
-        summary.done += ACCOUNT_DAILY_TODOS.filter((task) => dailyBucket[task.id]).length;
-        summary.done += ACCOUNT_EVENT_TODOS.filter((task) => weeklyBucket[task.id]).length;
+        const dailyTodos = getAllAccountTodos("daily", group.key).filter((task) => !getAccountTodoExclusionBucket("daily", group.key)[task.id]);
+        const weeklyTodos = getAllAccountTodos("weekly", group.key).filter((task) => !getAccountTodoExclusionBucket("weekly", group.key)[task.id]);
+        summary.total += dailyTodos.length + weeklyTodos.length;
+        summary.done += dailyTodos.filter((task) => dailyBucket[task.id]).length;
+        summary.done += weeklyTodos.filter((task) => weeklyBucket[task.id]).length;
       });
       return summary;
     }
@@ -3594,6 +3672,19 @@
       const bucket = getAccountTodoBucket(type, accountKey);
       return tasks.map((task) => {
         const checked = Boolean(bucket[task.id]);
+        const excluded = Boolean(getAccountTodoExclusionBucket(type, accountKey)[task.id]);
+        if (state.todoMode === "edit") {
+          return `
+            <div class="todo-item${excluded ? " excluded" : ""}">
+              <span></span>
+              <span class="todo-name">${escapeHtml(task.label)}</span>
+              <span class="todo-bulk-actions">
+                <button class="todo-edit-button${excluded ? " active" : ""}" type="button" data-toggle-account-todo="${escapeHtml(task.id)}" data-account-todo-type="${escapeHtml(type)}" data-account-key="${escapeHtml(accountKey)}">${excluded ? "포함" : "제외"}</button>
+                ${task.custom ? `<button class="todo-edit-button active" type="button" data-delete-account-todo="${escapeHtml(task.id)}" data-account-todo-type="${escapeHtml(type)}" data-account-key="${escapeHtml(accountKey)}">삭제</button>` : ""}
+              </span>
+            </div>`;
+        }
+        if (excluded) return "";
         return `
           <label class="todo-item${checked ? " done" : ""}">
             <input type="checkbox" data-account-todo-type="${escapeHtml(type)}" data-account-key="${escapeHtml(accountKey)}" data-task-id="${escapeHtml(task.id)}"${checked ? " checked" : ""}>
@@ -3602,6 +3693,14 @@
           </label>
         `;
       }).join("");
+    }
+
+    function renderAccountTodoAddForm(type, accountKey) {
+      if (state.todoMode !== "edit") return "";
+      return `<form class="todo-add-form" data-add-account-todo="${escapeHtml(type)}" data-account-key="${escapeHtml(accountKey)}">
+        <input class="todo-add-input" name="todoLabel" maxlength="40" placeholder="개인 TODO 추가" aria-label="개인 TODO 이름">
+        <button class="todo-bulk-button" type="submit">추가</button>
+      </form>`;
     }
 
     function renderAccountTodoCard(group, index) {
@@ -3618,11 +3717,13 @@
           <div class="account-todo-sections">
             <section class="todo-section">
               <div class="todo-section-title"><span>일일 계정 숙제</span><span>매일 00:00</span></div>
-              <div class="todo-list">${renderAccountTodoItems("daily", group.key, ACCOUNT_DAILY_TODOS, "오늘")}</div>
+              <div class="todo-list">${renderAccountTodoItems("daily", group.key, getAllAccountTodos("daily", group.key), "오늘")}</div>
+              ${renderAccountTodoAddForm("daily", group.key)}
             </section>
             <section class="todo-section">
               <div class="todo-section-title"><span>이벤트</span><span>계정 공용</span></div>
-              <div class="todo-list">${renderAccountTodoItems("weekly", group.key, ACCOUNT_EVENT_TODOS, "이번 주")}</div>
+              <div class="todo-list">${renderAccountTodoItems("weekly", group.key, getAllAccountTodos("weekly", group.key), "이번 주")}</div>
+              ${renderAccountTodoAddForm("weekly", group.key)}
             </section>
           </div>
         </article>
@@ -4556,6 +4657,26 @@
     });
 
     els.todoGrid.addEventListener("click", (event) => {
+      const accountEditButton = event.target.closest("[data-toggle-account-todo]");
+      if (accountEditButton) {
+        toggleAccountTodoTask(
+          accountEditButton.dataset.accountTodoType,
+          accountEditButton.dataset.accountKey,
+          accountEditButton.dataset.toggleAccountTodo,
+        );
+        return;
+      }
+
+      const accountDeleteButton = event.target.closest("[data-delete-account-todo]");
+      if (accountDeleteButton) {
+        deleteCustomAccountTodo(
+          accountDeleteButton.dataset.accountTodoType,
+          accountDeleteButton.dataset.accountKey,
+          accountDeleteButton.dataset.deleteAccountTodo,
+        );
+        return;
+      }
+
       const editTaskButton = event.target.closest("[data-toggle-todo-task]");
       if (editTaskButton) {
         toggleTodoTask(
@@ -4588,6 +4709,13 @@
         return;
       }
       toggleTodoSection(button.dataset.characterId, button.dataset.toggleTodoSection);
+    });
+
+    els.todoGrid.addEventListener("submit", (event) => {
+      const form = event.target.closest("[data-add-account-todo]");
+      if (!form) return;
+      event.preventDefault();
+      addCustomAccountTodo(form.dataset.addAccountTodo, form.dataset.accountKey, form.elements.todoLabel.value);
     });
 
     els.todoModeButtons.forEach((button) => {
