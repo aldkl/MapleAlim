@@ -13,7 +13,9 @@ ALLOWED_ORIGINS = {
     "http://localhost:8765",
 }
 CACHE_TTL_SECONDS = 6 * 60 * 60
+REFRESH_COOLDOWN_SECONDS = 5 * 60
 _character_cache = {}
+_last_refreshes = {}
 
 
 class handler(BaseHTTPRequestHandler):
@@ -46,6 +48,15 @@ class handler(BaseHTTPRequestHandler):
             lookup_date = (date.today() - timedelta(days=1)).isoformat()
 
         cache_key = f"{lookup_date}:{name.casefold()}"
+        now = time.time()
+        if refresh:
+            retry_after = REFRESH_COOLDOWN_SECONDS - (now - _last_refreshes.get(cache_key, 0))
+            if retry_after > 0:
+                self._write_json(
+                    {"error": f"캐릭터 정보는 {int(retry_after) + 1}초 후 다시 갱신할 수 있습니다.", "retryAfter": int(retry_after) + 1},
+                    status=429,
+                )
+                return
         cached = _character_cache.get(cache_key)
         if not refresh and cached and time.time() - cached["stored_at"] < CACHE_TTL_SECONDS:
             self._write_json({**cached["payload"], "cached": True})
@@ -61,6 +72,8 @@ class handler(BaseHTTPRequestHandler):
             "stored_at": time.time(),
             "payload": payload,
         }
+        if refresh:
+            _last_refreshes[cache_key] = now
         self._write_json({**payload, "cached": False})
 
     def _write_cors_headers(self):

@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import date, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -9,6 +10,8 @@ from nexon_api import NexonApiError, find_character_account, get_character_summa
 
 HOST = "127.0.0.1"
 PORT = 8765
+REFRESH_COOLDOWN_SECONDS = 5 * 60
+LAST_REFRESHES = {}
 CACHE_PATH = Path("data/character_cache.json")
 APP_ROUTES = {
     "/",
@@ -64,6 +67,15 @@ class MapleAlimHandler(SimpleHTTPRequestHandler):
 
         cache = read_character_cache()
         cache_key = f"{lookup_date}:{name.lower()}"
+        now = time.time()
+        if refresh:
+            retry_after = REFRESH_COOLDOWN_SECONDS - (now - LAST_REFRESHES.get(cache_key, 0))
+            if retry_after > 0:
+                self.write_json(
+                    {"error": f"캐릭터 정보는 {int(retry_after) + 1}초 후 다시 갱신할 수 있습니다.", "retryAfter": int(retry_after) + 1},
+                    status=429,
+                )
+                return
         if not refresh and cache_key in cache:
             cached = cache[cache_key]
             if not cached.get("account_id") and cached.get("ocid"):
@@ -85,6 +97,8 @@ class MapleAlimHandler(SimpleHTTPRequestHandler):
 
         cache[cache_key] = {**data, "cached": False}
         write_character_cache(cache)
+        if refresh:
+            LAST_REFRESHES[cache_key] = now
 
         self.write_json(data)
 

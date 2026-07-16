@@ -420,17 +420,32 @@
       gap: 8px;
     }
 
-    .character-delete-button {
+    .character-delete-button,
+    .character-refresh-button {
       min-height: 30px;
-      border: 1px solid rgba(200, 70, 58, 0.32);
       border-radius: 7px;
-      background: #fff7f6;
-      color: var(--danger);
       padding: 0 10px;
       font-size: 12px;
       font-weight: 900;
       cursor: pointer;
       white-space: nowrap;
+    }
+
+    .character-refresh-button {
+      border: 1px solid rgba(44, 107, 237, 0.3);
+      background: #f3f7ff;
+      color: var(--blue);
+    }
+
+    .character-refresh-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .character-delete-button {
+      border: 1px solid rgba(200, 70, 58, 0.32);
+      background: #fff7f6;
+      color: var(--danger);
     }
 
     .character-delete-button:hover,
@@ -855,6 +870,24 @@
     .boss-row.locked .difficulty-button:not(.active) {
       pointer-events: none;
       filter: grayscale(0.7);
+    }
+
+    .boss-row.boss-dragging {
+      opacity: 0.45;
+    }
+
+    .boss-row.boss-drag-over {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(44, 107, 237, 0.14);
+    }
+
+    .boss-drag-handle {
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .boss-drag-handle:active {
+      cursor: grabbing;
     }
 
     .boss-icon {
@@ -1975,9 +2008,9 @@
           <div class="metric-note">보스/주간 콘텐츠 기준</div>
         </article>
         <article class="metric">
-          <div class="metric-label">등록 캐릭터</div>
-          <div class="metric-value">0명</div>
-          <div class="metric-note">Nexon API 조회 후 표시 예정</div>
+          <div class="metric-label">남은 예상 수익</div>
+          <div class="metric-value gold">0 메소</div>
+          <div class="metric-note">예상 수익에서 이번 주 획득 차감</div>
         </article>
         <article class="metric">
           <div class="metric-label">완료율</div>
@@ -2391,6 +2424,8 @@
     const TODO_STORE_KEY = "almaple-todos-v1";
     const CALENDAR_STORE_KEY = "maple-plan-calendar-v1";
     const GOAL_STORE_KEY = "maple-plan-goals-v1";
+    const CHARACTER_REFRESH_STORE_KEY = "almaple-character-refresh-v1";
+    const CHARACTER_REFRESH_COOLDOWN_MS = 5 * 60 * 1000;
     const IS_GITHUB_PAGES = location.hostname.endsWith(".github.io");
     const APP_BASE_PATH = IS_GITHUB_PAGES
       ? `/${location.pathname.split("/").filter(Boolean)[0] || ""}`.replace(/\/$/, "")
@@ -2458,6 +2493,7 @@
       todos: readTodos(),
       calendarPlans: readCalendarPlans(),
       goals: readGoals(),
+      characterRefreshes: readCharacterRefreshes(),
       bossData: { meta: { weeklySelectionLimit: 12 }, bosses: [] },
       bossIcons: {},
       bossPresets: [],
@@ -2573,6 +2609,32 @@
 
     function saveCharacters() {
       localStorage.setItem(STORE_KEY, JSON.stringify(state.characters));
+    }
+
+    function readCharacterRefreshes() {
+      try {
+        const value = JSON.parse(localStorage.getItem(CHARACTER_REFRESH_STORE_KEY) || "{}");
+        return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+      } catch {
+        localStorage.removeItem(CHARACTER_REFRESH_STORE_KEY);
+        return {};
+      }
+    }
+
+    function saveCharacterRefreshes() {
+      localStorage.setItem(CHARACTER_REFRESH_STORE_KEY, JSON.stringify(state.characterRefreshes));
+    }
+
+    function getCharacterRefreshRemaining(characterId) {
+      const refreshedAt = Number(state.characterRefreshes[characterId]) || 0;
+      return Math.max(0, CHARACTER_REFRESH_COOLDOWN_MS - (Date.now() - refreshedAt));
+    }
+
+    function formatRefreshRemaining(milliseconds) {
+      const seconds = Math.ceil(milliseconds / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const remainder = seconds % 60;
+      return `${minutes}:${String(remainder).padStart(2, "0")} 후 갱신`;
     }
 
     function readBossPlans() {
@@ -2871,7 +2933,7 @@
         }
         groups.get(boss.name).push(boss);
       });
-      return Array.from(groups.entries()).map(([name, bosses]) => {
+      const result = Array.from(groups.entries()).map(([name, bosses]) => {
         const sortedBosses = bosses.sort((a, b) => difficultyRank(a.difficulty) - difficultyRank(b.difficulty));
         return {
           name,
@@ -2879,6 +2941,16 @@
           bosses: sortedBosses,
         };
       }).sort((a, b) => cycleRank(a.cycle) - cycleRank(b.cycle));
+      const savedOrder = getCharacterSettings(characterId).bossOrder;
+      if (!Array.isArray(savedOrder) || !savedOrder.length) {
+        return result;
+      }
+      const order = new Map(savedOrder.map((name, index) => [name, index]));
+      return result.sort((a, b) => {
+        const aIndex = order.has(a.name) ? order.get(a.name) : Number.MAX_SAFE_INTEGER;
+        const bIndex = order.has(b.name) ? order.get(b.name) : Number.MAX_SAFE_INTEGER;
+        return aIndex - bIndex;
+      });
     }
 
     const COMPACT_BOSS_NAMES = new Set(["자쿰", "매그너스", "반반", "피에르", "파풀라투스", "블러디 퀸", "벨룸"]);
@@ -3756,6 +3828,7 @@
       const world = character.world_name || "-";
       const expRate = character.character_exp_rate ?? "-";
       const bossIncome = getBossIncome(character.ocid);
+      const refreshRemaining = getCharacterRefreshRemaining(character.ocid);
 
       return `
         <article class="character-row" data-character-card-id="${escapeHtml(character.ocid)}">
@@ -3780,6 +3853,7 @@
           </div>
           <div class="character-actions">
             <span class="status-pill">API 연동</span>
+            <button class="character-refresh-button" type="button" data-refresh-character="${escapeHtml(character.ocid)}"${refreshRemaining ? " disabled" : ""}>${refreshRemaining ? formatRefreshRemaining(refreshRemaining) : "정보 갱신"}</button>
             <button class="character-delete-button" type="button" data-delete-character="${escapeHtml(character.ocid)}" aria-label="${escapeHtml(character.character_name || "캐릭터")} 삭제">삭제</button>
           </div>
         </article>
@@ -3800,6 +3874,7 @@
 
       state.characters = state.characters.filter((item) => item.ocid !== characterId);
       delete state.bossPlans[characterId];
+      delete state.characterRefreshes[characterId];
       state.goals = state.goals.filter((goal) => goal.characterId !== characterId);
       Object.values(state.todos.done).forEach((bucket) => {
         if (bucket && typeof bucket === "object") {
@@ -3812,6 +3887,7 @@
       }
 
       saveCharacters();
+      saveCharacterRefreshes();
       saveBossPlans();
       saveTodos();
       saveGoals();
@@ -3848,6 +3924,17 @@
       `;
     }
 
+    let characterRefreshTimer = null;
+
+    function scheduleCharacterRefreshRender() {
+      if (characterRefreshTimer) clearTimeout(characterRefreshTimer);
+      const remaining = Object.keys(state.characterRefreshes)
+        .map(getCharacterRefreshRemaining)
+        .filter((value) => value > 0);
+      if (!remaining.length) return;
+      characterRefreshTimer = setTimeout(render, Math.min(...remaining) + 50);
+    }
+
     function render() {
       if (!state.activeCharacterId && state.characters.length) {
         state.activeCharacterId = state.characters[0].ocid;
@@ -3865,13 +3952,14 @@
       const todoSummary = getTodoSummary();
       els.metrics[0].textContent = formatMeso(totalWeekly);
       els.metrics[1].textContent = formatMeso(completedBossIncome);
-      els.metrics[2].textContent = `${state.characters.length}명`;
+      els.metrics[2].textContent = formatMeso(Math.max(0, totalWeekly - completedBossIncome));
       els.metrics[3].textContent = todoSummary.total ? `${Math.round((todoSummary.done / todoSummary.total) * 100)}%` : "0%";
       renderBossPanel();
       renderAllBossEditor();
       renderTodoGrid();
       renderCalendar();
       renderGoals();
+      scheduleCharacterRefreshRender();
     }
 
     function updateBossUiPreservingScroll() {
@@ -3957,7 +4045,7 @@
       ].filter(Boolean).join(" ");
       return `
         <div class="${rowClasses}" data-boss-name="${escapeHtml(group.name)}">
-          ${renderBossIcon(group.name, selectedBoss || group.bosses[group.bosses.length - 1])}
+          <div class="boss-drag-handle" draggable="true" data-drag-boss-name="${escapeHtml(group.name)}" title="드래그해서 보스 위치 변경">${renderBossIcon(group.name, selectedBoss || group.bosses[group.bosses.length - 1])}</div>
           <div>
             <div class="boss-name">${escapeHtml(group.name)}</div>
             <div class="boss-difficulty">${cycleLabel(selectedBoss || group.bosses[0])}</div>
@@ -4037,7 +4125,7 @@
       ].filter(Boolean).join(" ");
       return `
         <div class="${rowClasses}" data-character-id="${escapeHtml(characterId)}" data-boss-name="${escapeHtml(group.name)}">
-          ${renderBossIcon(group.name, selectedBoss || group.bosses[group.bosses.length - 1])}
+          <div class="boss-drag-handle" draggable="true" data-drag-boss-name="${escapeHtml(group.name)}" title="드래그해서 보스 위치 변경">${renderBossIcon(group.name, selectedBoss || group.bosses[group.bosses.length - 1])}</div>
           <div>
             <div class="boss-name">${escapeHtml(group.name)}</div>
             <div class="boss-difficulty">${cycleLabel(selectedBoss || group.bosses[0])}</div>
@@ -4084,6 +4172,36 @@
       saveCharacters();
       render();
       setMessage(`${payload.character_name} 캐릭터 정보를 가져왔습니다.`);
+    }
+
+    async function refreshCharacter(characterId) {
+      const character = state.characters.find((item) => item.ocid === characterId);
+      if (!character) return;
+      const remaining = getCharacterRefreshRemaining(characterId);
+      if (remaining) {
+        setMessage(`캐릭터 정보는 ${formatRefreshRemaining(remaining).replace(" 후 갱신", " 후")} 다시 갱신할 수 있습니다.`, true);
+        return;
+      }
+      const button = els.list.querySelector(`[data-refresh-character="${CSS.escape(characterId)}"]`);
+      if (button) {
+        button.disabled = true;
+        button.textContent = "갱신 중...";
+      }
+      try {
+        const response = await fetch(apiUrl(`/api/character?name=${encodeURIComponent(character.character_name)}&refresh=1`));
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "캐릭터 정보를 갱신하지 못했습니다.");
+        const index = state.characters.findIndex((item) => item.ocid === characterId);
+        state.characters[index] = { ...character, ...payload };
+        state.characterRefreshes[characterId] = Date.now();
+        saveCharacters();
+        saveCharacterRefreshes();
+        render();
+        setMessage(`${payload.character_name} 캐릭터 정보를 새로 갱신했습니다.`);
+      } catch (error) {
+        render();
+        setMessage(error.message, true);
+      }
     }
 
     async function hydrateCharacterAccounts() {
@@ -4326,6 +4444,65 @@
       container.addEventListener("dragend", handleCharacterDragEnd);
     }
 
+    let draggedBoss = null;
+
+    function clearBossDragState() {
+      draggedBoss = null;
+      document.querySelectorAll(".boss-dragging, .boss-drag-over").forEach((element) => {
+        element.classList.remove("boss-dragging", "boss-drag-over");
+      });
+    }
+
+    function moveBoss(characterId, draggedName, targetName, placeAfter) {
+      if (!characterId || !draggedName || !targetName || draggedName === targetName) {
+        return false;
+      }
+      const order = getBossGroups(characterId).map((group) => group.name);
+      const fromIndex = order.indexOf(draggedName);
+      if (fromIndex < 0 || !order.includes(targetName)) {
+        return false;
+      }
+      order.splice(fromIndex, 1);
+      const targetIndex = order.indexOf(targetName);
+      order.splice(targetIndex + (placeAfter ? 1 : 0), 0, draggedName);
+      getCharacterSettings(characterId).bossOrder = order;
+      saveBossPlans();
+      updateBossUiPreservingScroll();
+      return true;
+    }
+
+    function attachBossDrag(container, getCharacterId) {
+      container.addEventListener("dragstart", (event) => {
+        const handle = event.target.closest("[data-drag-boss-name]");
+        if (!handle) return;
+        const row = handle.closest(".boss-row");
+        const characterId = getCharacterId(row);
+        if (!row || !characterId) return;
+        draggedBoss = { characterId, name: handle.dataset.dragBossName };
+        row.classList.add("boss-dragging");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", draggedBoss.name);
+      });
+      container.addEventListener("dragover", (event) => {
+        const row = event.target.closest(".boss-row");
+        if (!draggedBoss || !row || getCharacterId(row) !== draggedBoss.characterId || row.dataset.bossName === draggedBoss.name) return;
+        event.preventDefault();
+        container.querySelectorAll(".boss-drag-over").forEach((element) => element.classList.remove("boss-drag-over"));
+        row.classList.add("boss-drag-over");
+        event.dataTransfer.dropEffect = "move";
+      });
+      container.addEventListener("drop", (event) => {
+        const row = event.target.closest(".boss-row");
+        if (!draggedBoss || !row || getCharacterId(row) !== draggedBoss.characterId) return;
+        event.preventDefault();
+        const rect = row.getBoundingClientRect();
+        const moved = moveBoss(draggedBoss.characterId, draggedBoss.name, row.dataset.bossName, event.clientY > rect.top + rect.height / 2);
+        clearBossDragState();
+        if (moved) setMessage("보스 위치를 변경했습니다.");
+      });
+      container.addEventListener("dragend", clearBossDragState);
+    }
+
     async function loadBossData() {
       try {
         const [response, iconResponse, presetResponse, rewardResponse] = await Promise.all([
@@ -4447,6 +4624,11 @@
     });
 
     els.list.addEventListener("click", (event) => {
+      const refreshButton = event.target.closest("[data-refresh-character]");
+      if (refreshButton) {
+        refreshCharacter(refreshButton.dataset.refreshCharacter);
+        return;
+      }
       const deleteButton = event.target.closest("[data-delete-character]");
       if (!deleteButton) {
         return;
@@ -4773,6 +4955,8 @@
     attachCharacterDrag(els.list);
     attachCharacterDrag(els.allBossEditor);
     attachCharacterDrag(els.todoGrid);
+    attachBossDrag(els.bossList, () => state.activeCharacterId);
+    attachBossDrag(els.allBossEditor, (row) => row?.dataset.characterId || "");
 
     els.navItems.forEach((item) => {
       item.addEventListener("click", (event) => {
