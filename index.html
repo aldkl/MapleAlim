@@ -2255,11 +2255,11 @@
               <div class="tool-group-body">
                 <label class="tool-field"><span>몬스터 Lv.</span><input id="huntingMonsterLevel" type="number" min="1" value="285"><span>레벨</span></label>
                 <label class="tool-field"><span>6분 사냥</span><input id="huntingKillsPerSix" type="number" min="1" value="1900"><span>마리</span></label>
-                <label class="tool-field"><span>하루 사냥</span><input id="huntingDailyHours" type="number" min="0" step="0.1" value="4.7"><span>시간</span></label>
+                <label class="tool-field"><span>하루 사냥</span><input id="huntingDailyUnits" type="number" min="0" step="1" value="9"><span>소재비</span></label>
                 <label class="tool-field"><span>주간 사냥일</span><input id="huntingWeeklyDays" type="number" min="0" max="7" value="7"><span>일</span></label>
                 <label class="tool-field"><span>기본 메소 제한</span><input id="huntingMesoCap" type="number" min="0" step="1000000" value="200000000"><span>메소</span></label>
                 <label class="tool-field"><span>기본 메소</span><input id="huntingBaseMeso" type="number" min="0" step="0.1" value="7.5"><span>×레벨</span></label>
-                <div class="hunting-note">입력한 시간만큼 사냥하고 기본 메소는 일일 제한까지만 계산합니다. 정산 포함을 체크한 캐릭터만 주간·월간 수익에 합산합니다.</div>
+                <div class="hunting-note">소재비 1개를 30분으로 계산합니다. 기본 메소는 일일 제한까지만 계산하며, 정산 포함을 체크한 캐릭터만 주간·월간 수익에 합산합니다.</div>
               </div>
             </div>
             <div class="tool-group">
@@ -2593,7 +2593,7 @@
       huntingExtraMeso: document.querySelector("#huntingExtraMeso"),
       huntingMonsterLevel: document.querySelector("#huntingMonsterLevel"),
       huntingKillsPerSix: document.querySelector("#huntingKillsPerSix"),
-      huntingDailyHours: document.querySelector("#huntingDailyHours"),
+      huntingDailyUnits: document.querySelector("#huntingDailyUnits"),
       huntingWeeklyDays: document.querySelector("#huntingWeeklyDays"),
       huntingMesoCap: document.querySelector("#huntingMesoCap"),
       huntingBaseMeso: document.querySelector("#huntingBaseMeso"),
@@ -3986,8 +3986,8 @@
       const bonuses = character?.hunting_bonus_stats || {};
       const ability = (bonuses.ability_presets || []).find((item) => Number(item.preset_no) === Number(settings?.abilityPresetNo)) || {};
       return {
-        drop: 24 + 20 + (Number(bonuses.challengers_drop) || 0) + (Number(bonuses.holy_symbol_drop) || 0) + (Number(bonuses.union_drop) || 0) + (Number(bonuses.artifact_drop) || 0) + (Number(ability.drop_rate) || 0),
-        meso: 20 + (Number(bonuses.challengers_meso) || 0) + (Number(bonuses.union_meso) || 0) + (Number(bonuses.artifact_meso) || 0) + (Number(ability.meso_rate) || 0),
+        drop: 24 + (Number(bonuses.challengers_drop) || 0) + (Number(bonuses.holy_symbol_drop) || 0) + (Number(bonuses.union_drop) || 0) + (Number(bonuses.artifact_drop) || 0) + (Number(ability.drop_rate) || 0),
+        meso: (Number(bonuses.challengers_meso) || 0) + (Number(bonuses.union_meso) || 0) + (Number(bonuses.artifact_meso) || 0) + (Number(ability.meso_rate) || 0),
       };
     }
 
@@ -4001,7 +4001,7 @@
         extraMeso: 0,
         monsterLevel: Math.max(1, Number(character?.character_level) || 285),
         killsPerSix: 1900,
-        dailyHours: 4.7,
+        dailyUnits: 9,
         weeklyDays: 7,
         mesoCap: getDefaultMesoCap(character?.character_level),
         baseMeso: 7.5,
@@ -4013,8 +4013,10 @@
       };
       const saved = state.huntingSettings[character?.ocid] || {};
       const merged = { ...defaults, ...saved };
-      if (saved.dailyHours == null && saved.dailyRate != null) {
-        merged.dailyHours = defaults.dailyHours * Math.max(0, Math.min(100, Number(saved.dailyRate))) / 100;
+      if (saved.dailyUnits == null && saved.dailyHours != null) {
+        merged.dailyUnits = Math.max(0, Math.round(Number(saved.dailyHours) * 2));
+      } else if (saved.dailyUnits == null && saved.dailyRate != null) {
+        merged.dailyUnits = Math.max(0, Math.round(9.4 * Math.max(0, Math.min(100, Number(saved.dailyRate))) / 100));
       }
       return merged;
     }
@@ -4023,22 +4025,23 @@
       const automatic = getHuntingAutomaticRates(character, settings);
       const totalDrop = Number(settings.equipmentDrop) + Number(settings.extraDrop) + automatic.drop;
       const totalMeso = Number(settings.equipmentMeso) + Number(settings.extraMeso) + automatic.meso;
-      const dropMultiplier = Math.min(5, 1 + totalDrop / 100);
+      const wealthPotionMultiplier = 1.2;
+      const dropMultiplier = Math.min(5, (1 + totalDrop / 100) * wealthPotionMultiplier);
       const levelMultiplier = getMesoLevelMultiplier(Number(character?.character_level) || Number(settings.monsterLevel), Number(settings.monsterLevel));
       const baseMesoPerKill = Number(settings.monsterLevel) * Number(settings.baseMeso) * levelMultiplier;
-      const hours = Math.max(0, Number(settings.dailyHours) || 0);
+      const hours = Math.max(0, Math.floor(Number(settings.dailyUnits) || 0)) * 0.5;
       const huntingKills = Math.floor(hours * Math.max(1, Number(settings.killsPerSix)) * 10);
       const targetBaseMeso = Math.min(Number(settings.mesoCap), huntingKills * baseMesoPerKill);
       const requiredKills = baseMesoPerKill > 0 ? Math.ceil(Number(settings.mesoCap) / baseMesoPerKill) : 0;
       const capRate = Number(settings.mesoCap) > 0 ? Math.min(100, targetBaseMeso / Number(settings.mesoCap) * 100) : 0;
       const coreCount = huntingKills * (Number(settings.coreRate) / 100) * dropMultiplier;
       const fragmentCount = Number(settings.monsterLevel) >= 260 ? huntingKills * (Number(settings.fragmentRate) / 100) * dropMultiplier : 0;
-      const finalMesoIncome = targetBaseMeso * (1 + totalMeso / 100);
+      const finalMesoIncome = targetBaseMeso * (1 + totalMeso / 100) * wealthPotionMultiplier;
       const itemIncome = coreCount * Number(settings.corePrice) + fragmentCount * Number(settings.fragmentPrice);
       const dailyIncome = finalMesoIncome + itemIncome;
       const weeklyDays = Math.max(0, Math.min(7, Number(settings.weeklyDays)));
       return {
-        totalDrop, totalMeso, levelMultiplier, targetBaseMeso, requiredKills, huntingKills, hours, capRate, coreCount, fragmentCount,
+        totalDrop, totalMeso, wealthPotionMultiplier, levelMultiplier, targetBaseMeso, requiredKills, huntingKills, hours, capRate, coreCount, fragmentCount,
         finalMesoIncome, itemIncome, dailyIncome,
         weeklyIncome: dailyIncome * weeklyDays,
         monthlyIncome: dailyIncome * (weeklyDays / 7) * 30,
@@ -4070,7 +4073,7 @@
       els.huntingExtraMeso.value = settings.extraMeso;
       els.huntingMonsterLevel.value = settings.monsterLevel;
       els.huntingKillsPerSix.value = settings.killsPerSix;
-      els.huntingDailyHours.value = settings.dailyHours;
+      els.huntingDailyUnits.value = settings.dailyUnits;
       els.huntingWeeklyDays.value = settings.weeklyDays;
       els.huntingMesoCap.value = settings.mesoCap;
       els.huntingBaseMeso.value = settings.baseMeso;
@@ -4094,7 +4097,7 @@
       }
       els.huntingBonusSummary.innerHTML = `
         <div class="hunting-result"><span>민생 지원</span><strong>드롭 24%</strong></div>
-        <div class="hunting-result"><span>재물 획득의 비약</span><strong>드롭 20% · 메획 20%</strong></div>
+        <div class="hunting-result"><span>재물 획득의 비약</span><strong>드롭·메소 최종 1.2배</strong></div>
         <div class="hunting-result"><span>홀리 심볼</span><strong>드롭 ${Number(bonuses.holy_symbol_drop) || 0}%</strong></div>
         <div class="hunting-result"><span>유니온</span><strong>드롭 ${Number(bonuses.union_drop) || 0}% · 메획 ${Number(bonuses.union_meso) || 0}%</strong></div>
         <div class="hunting-result"><span>유니온 아티팩트</span><strong>${bonuses.artifact_active === false ? "활성 효과 없음 · " : ""}드롭 ${Number(bonuses.artifact_drop) || 0}% · 메획 ${Number(bonuses.artifact_meso) || 0}%</strong></div>
@@ -4118,7 +4121,7 @@
         extraMeso: Number(els.huntingExtraMeso.value) || 0,
         monsterLevel: Math.max(1, Number(els.huntingMonsterLevel.value) || 1),
         killsPerSix: Math.max(1, Number(els.huntingKillsPerSix.value) || 1),
-        dailyHours: Math.max(0, Number(els.huntingDailyHours.value) || 0),
+        dailyUnits: Math.max(0, Math.floor(Number(els.huntingDailyUnits.value) || 0)),
         weeklyDays: Math.max(0, Math.min(7, Number(els.huntingWeeklyDays.value) || 0)),
         mesoCap: Math.max(0, Number(els.huntingMesoCap.value) || 0),
         baseMeso: Math.max(0, Number(els.huntingBaseMeso.value) || 0),
@@ -4138,9 +4141,10 @@
       }
       const totalMinutes = Math.round(projection.hours * 60);
       els.huntingResults.innerHTML = `
-        <div class="hunting-result"><span>적용 드롭률 / 메획</span><strong>${projection.totalDrop.toLocaleString("ko-KR")}% / ${projection.totalMeso.toLocaleString("ko-KR")}%</strong></div>
+        <div class="hunting-result"><span>합산 드롭률 / 메획</span><strong>${projection.totalDrop.toLocaleString("ko-KR")}% / ${projection.totalMeso.toLocaleString("ko-KR")}%</strong></div>
+        <div class="hunting-result"><span>재획비 곱연산</span><strong>드롭·메소 ×${projection.wealthPotionMultiplier}</strong></div>
         <div class="hunting-result"><span>정산 반영</span><strong>${settings.enabled ? "포함" : "미포함"}</strong></div>
-        <div class="hunting-result"><span>일일 사냥 목표</span><strong>${settings.dailyHours}시간 · 주 ${settings.weeklyDays}일 · 메제 ${projection.capRate.toFixed(1)}%</strong></div>
+        <div class="hunting-result"><span>일일 사냥 목표</span><strong>소재비 ${settings.dailyUnits}개 (${Math.floor(totalMinutes / 60)}시간 ${totalMinutes % 60}분) · 주 ${settings.weeklyDays}일 · 메제 ${projection.capRate.toFixed(1)}%</strong></div>
         <div class="hunting-result"><span>일일 사냥 마릿수</span><strong>${projection.huntingKills.toLocaleString("ko-KR")}마리 · ${Math.floor(totalMinutes / 60)}시간 ${totalMinutes % 60}분</strong></div>
         <div class="hunting-result"><span>메획 적용 사냥 메소</span><strong>${formatMeso(projection.finalMesoIncome)}</strong></div>
         <div class="hunting-result"><span>코어 젬스톤 기대값</span><strong>${projection.coreCount.toFixed(1)}개 · ${formatMeso(projection.coreCount * settings.corePrice)}</strong></div>
@@ -4176,7 +4180,7 @@
       const bossIncome = getBossIncome(character.ocid);
       const huntingIncome = getSettlementHuntingProjection(character);
       const huntingSettings = getCharacterHuntingSettings(character);
-      const huntingSchedule = huntingSettings.enabled ? `${huntingSettings.dailyHours}시간×${huntingSettings.weeklyDays}일` : "미선택";
+      const huntingSchedule = huntingSettings.enabled ? `소재비 ${huntingSettings.dailyUnits}개×${huntingSettings.weeklyDays}일` : "미선택";
       const refreshRemaining = getCharacterRefreshRemaining(character.ocid);
 
       return `
@@ -5114,7 +5118,7 @@
       els.huntingMonsterLevel,
       els.huntingKillsPerSix,
       els.huntingEnabled,
-      els.huntingDailyHours,
+      els.huntingDailyUnits,
       els.huntingWeeklyDays,
       els.huntingMesoCap,
       els.huntingBaseMeso,
