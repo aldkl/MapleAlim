@@ -3995,6 +3995,8 @@
       const preset = getBestHuntingPreset(character);
       const defaults = {
         enabled: false,
+        equipmentPresetNo: Number(preset?.preset_no) || 0,
+        equipmentCustomized: false,
         equipmentDrop: Number(preset?.drop_rate) || 0,
         equipmentMeso: Number(preset?.meso_rate) || 0,
         extraDrop: 0,
@@ -4017,6 +4019,12 @@
         merged.dailyUnits = Math.max(0, Math.round(Number(saved.dailyHours) * 2));
       } else if (saved.dailyUnits == null && saved.dailyRate != null) {
         merged.dailyUnits = Math.max(0, Math.round(9.4 * Math.max(0, Math.min(100, Number(saved.dailyRate))) / 100));
+      }
+      const presetChanged = Number(saved.equipmentPresetNo) !== Number(preset?.preset_no);
+      if (preset && saved.equipmentCustomized !== true && (saved.equipmentPresetNo == null || presetChanged)) {
+        merged.equipmentPresetNo = Number(preset.preset_no) || 0;
+        merged.equipmentDrop = Number(preset.drop_rate) || 0;
+        merged.equipmentMeso = Number(preset.meso_rate) || 0;
       }
       return merged;
     }
@@ -4110,14 +4118,19 @@
       calculateHuntingProfit();
     }
 
-    function calculateHuntingProfit() {
+    function calculateHuntingProfit(event) {
       const character = state.characters.find((item) => item.ocid === state.huntingCharacterId);
       if (!character) {
         els.huntingResults.innerHTML = `<div class="hunting-note">캐릭터를 먼저 등록해 주세요.</div>`;
         return;
       }
+      const preset = getBestHuntingPreset(character);
+      const previousSettings = state.huntingSettings[character.ocid] || {};
+      const equipmentEdited = event?.target === els.huntingEquipmentDrop || event?.target === els.huntingEquipmentMeso;
       const settings = {
         enabled: els.huntingEnabled.checked,
+        equipmentPresetNo: Number(preset?.preset_no) || 0,
+        equipmentCustomized: previousSettings.equipmentCustomized === true || equipmentEdited,
         equipmentDrop: Number(els.huntingEquipmentDrop.value) || 0,
         equipmentMeso: Number(els.huntingEquipmentMeso.value) || 0,
         extraDrop: Number(els.huntingExtraDrop.value) || 0,
