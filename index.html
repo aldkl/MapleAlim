@@ -2224,7 +2224,7 @@
                 <div class="hunting-bonus-summary" id="huntingBonusSummary"></div>
                 <label class="tool-field"><span>직접 추가 드롭</span><input id="huntingExtraDrop" type="number" min="0" value="0"><span>%</span></label>
                 <label class="tool-field"><span>직접 추가 메획</span><input id="huntingExtraMeso" type="number" min="0" value="0"><span>%</span></label>
-                <div class="hunting-note">민생 지원 드롭 24%와 재획비 드롭/메획 20%는 항상 적용합니다. 홀리 심볼, 유니온, 아티팩트는 Nexon API에서 자동으로 가져옵니다.</div>
+                <div class="hunting-note">민생 지원 드롭 24%와 재획비 드롭/메획 20%는 항상 적용합니다. 홀리 심볼, 유니온, 아티팩트는 API에서 가져오며 챌린저스 월드는 사파이어 이상 드롭/메획 20%를 추가합니다.</div>
               </div>
             </div>
           </section>
@@ -3936,6 +3936,7 @@
       const character = state.characters.find((item) => item.ocid === characterId);
       const preset = getBestHuntingPreset(character);
       const bonuses = character?.hunting_bonus_stats || {};
+      const isChallengersWorld = String(character?.world_name || "").startsWith("챌린저스");
       els.huntingEquipmentDrop.value = preset?.drop_rate || 0;
       els.huntingEquipmentMeso.value = preset?.meso_rate || 0;
       els.huntingMonsterLevel.value = Math.max(1, Number(character?.character_level) || 285);
@@ -3960,6 +3961,7 @@
         <div class="hunting-result"><span>홀리 심볼</span><strong>드롭 ${Number(bonuses.holy_symbol_drop) || 0}%</strong></div>
         <div class="hunting-result"><span>유니온</span><strong>드롭 ${Number(bonuses.union_drop) || 0}% · 메획 ${Number(bonuses.union_meso) || 0}%</strong></div>
         <div class="hunting-result"><span>유니온 아티팩트</span><strong>${bonuses.artifact_active === false ? "활성 효과 없음 · " : ""}드롭 ${Number(bonuses.artifact_drop) || 0}% · 메획 ${Number(bonuses.artifact_meso) || 0}%</strong></div>
+        <div class="hunting-result"><span>챌린저스 사파이어+</span><strong>${isChallengersWorld ? "드롭 20% · 메획 20%" : "해당 없음"}</strong></div>
       `;
       calculateHuntingProfit();
     }
@@ -3981,8 +3983,9 @@
       };
       const character = state.characters.find((item) => item.ocid === state.huntingCharacterId);
       const bonuses = character?.hunting_bonus_stats || {};
-      const automaticDrop = 24 + 20 + (Number(bonuses.holy_symbol_drop) || 0) + (Number(bonuses.union_drop) || 0) + (Number(bonuses.artifact_drop) || 0);
-      const automaticMeso = 20 + (Number(bonuses.union_meso) || 0) + (Number(bonuses.artifact_meso) || 0);
+      const challengersBonus = String(character?.world_name || "").startsWith("챌린저스") ? 20 : 0;
+      const automaticDrop = 24 + 20 + challengersBonus + (Number(bonuses.holy_symbol_drop) || 0) + (Number(bonuses.union_drop) || 0) + (Number(bonuses.artifact_drop) || 0);
+      const automaticMeso = 20 + challengersBonus + (Number(bonuses.union_meso) || 0) + (Number(bonuses.artifact_meso) || 0);
       const totalDrop = values.equipmentDrop + values.extraDrop + automaticDrop;
       const totalMeso = values.equipmentMeso + values.extraMeso + automaticMeso;
       const characterLevel = Number(character?.character_level) || values.monsterLevel;
