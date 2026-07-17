@@ -2235,9 +2235,9 @@
               <div class="tool-group-body">
                 <label class="tool-field"><span>몬스터 Lv.</span><input id="huntingMonsterLevel" type="number" min="1" value="285"><span>레벨</span></label>
                 <label class="tool-field"><span>6분 사냥</span><input id="huntingKillsPerSix" type="number" min="1" value="1900"><span>마리</span></label>
-                <label class="tool-field"><span>메소 제한</span><input id="huntingMesoCap" type="number" min="0" step="1000000" value="200000000"><span>메소</span></label>
+                <label class="tool-field"><span>기본 메소 제한</span><input id="huntingMesoCap" type="number" min="0" step="1000000" value="200000000"><span>메소</span></label>
                 <label class="tool-field"><span>기본 메소</span><input id="huntingBaseMeso" type="number" min="0" step="0.1" value="7.5"><span>×레벨</span></label>
-                <div class="hunting-note">몬스터 1마리 기본 메소는 `몬스터 레벨 × 7.5`, 메소 주머니 기본 드롭률은 60%로 가정하며 아이템 드롭률의 영향을 받습니다. 메소 제한은 직접 조정할 수 있습니다.</div>
+                <div class="hunting-note">메소 제한 도달 시간은 최종 메획이 아닌 몬스터 기본 메소 누적 기준입니다. 메획은 제한까지 사냥한 뒤 실제 획득하는 메소에만 적용합니다.</div>
               </div>
             </div>
             <div class="tool-group">
@@ -3990,24 +3990,25 @@
       const totalMeso = values.equipmentMeso + values.extraMeso + automaticMeso;
       const characterLevel = Number(character?.character_level) || values.monsterLevel;
       const dropMultiplier = Math.min(5, 1 + totalDrop / 100);
-      const mesoBagChance = Math.min(1, 0.6 * dropMultiplier);
       const levelMultiplier = getMesoLevelMultiplier(characterLevel, values.monsterLevel);
-      const mesoPerKill = values.monsterLevel * values.baseMeso * (1 + totalMeso / 100) * mesoBagChance * levelMultiplier;
-      const requiredKills = mesoPerKill > 0 ? Math.ceil(values.mesoCap / mesoPerKill) : 0;
+      const baseMesoPerKill = values.monsterLevel * values.baseMeso * levelMultiplier;
+      const requiredKills = baseMesoPerKill > 0 ? Math.ceil(values.mesoCap / baseMesoPerKill) : 0;
       const hours = requiredKills / (values.killsPerSix * 10);
+      const totalMinutes = Math.round(hours * 60);
+      const finalMesoIncome = values.mesoCap * (1 + totalMeso / 100);
       const coreCount = requiredKills * values.coreRate * dropMultiplier;
       const fragmentCount = values.monsterLevel >= 260 ? requiredKills * values.fragmentRate * dropMultiplier : 0;
       const itemIncome = coreCount * values.corePrice + fragmentCount * values.fragmentPrice;
-      const totalIncome = values.mesoCap + itemIncome;
+      const totalIncome = finalMesoIncome + itemIncome;
       els.huntingResults.innerHTML = `
         <div class="hunting-result"><span>적용 드롭률 / 메획</span><strong>${totalDrop.toLocaleString("ko-KR")}% / ${totalMeso.toLocaleString("ko-KR")}%</strong></div>
         <div class="hunting-result"><span>레벨 차이 메소 보정</span><strong>${Math.round(levelMultiplier * 100)}%</strong></div>
-        <div class="hunting-result"><span>메소 제한까지 사냥</span><strong>${requiredKills.toLocaleString("ko-KR")}마리 · ${hours.toFixed(1)}시간</strong></div>
-        <div class="hunting-result"><span>사냥 메소</span><strong>${formatMeso(values.mesoCap)}</strong></div>
+        <div class="hunting-result"><span>기본 메소 제한까지</span><strong>${requiredKills.toLocaleString("ko-KR")}마리 · ${Math.floor(totalMinutes / 60)}시간 ${totalMinutes % 60}분</strong></div>
+        <div class="hunting-result"><span>메획 적용 사냥 메소</span><strong>${formatMeso(finalMesoIncome)}</strong></div>
         <div class="hunting-result"><span>코어 젬스톤 기대값</span><strong>${coreCount.toFixed(1)}개 · ${formatMeso(coreCount * values.corePrice)}</strong></div>
         <div class="hunting-result"><span>솔 에르다 조각 기대값</span><strong>${fragmentCount.toFixed(1)}개 · ${formatMeso(fragmentCount * values.fragmentPrice)}</strong></div>
         <div class="hunting-result"><span>총 예상 수익</span><strong>${formatMeso(totalIncome)}</strong></div>
-        <div class="hunting-note">기대값은 장기 평균이며 실제 드롭 수량과 다를 수 있습니다. 솔 에르다 조각은 Lv.260 이상 몬스터에서만 계산합니다.</div>
+        <div class="hunting-note">메획을 바꿔도 기본 메소 제한까지 필요한 마릿수와 시간은 변하지 않습니다. 기대값은 장기 평균이며 실제 드롭 수량과 다를 수 있습니다.</div>
       `;
     }
 
