@@ -196,6 +196,25 @@ def get_hunting_bonus_stats(ocid, lookup_date=None):
         if "메소 획득량" in name:
             artifact_meso += value
 
+    try:
+        ability = request_json("/character/ability", {"ocid": ocid})
+    except NexonApiError:
+        ability = {}
+    ability_presets = []
+    for preset_no in range(1, 4):
+        preset = ability.get(f"ability_preset_{preset_no}") or {}
+        values = [item.get("ability_value") for item in (preset.get("ability_info") or [])]
+        ability_presets.append({
+            "preset_no": preset_no,
+            "drop_rate": _percent_from_texts(values, "아이템 드롭률"),
+            "meso_rate": _percent_from_texts(values, "메소 획득량"),
+        })
+    best_ability = max(
+        ability_presets,
+        key=lambda item: (item["drop_rate"] + item["meso_rate"], item["drop_rate"], -item["preset_no"]),
+        default={"preset_no": 0, "drop_rate": 0, "meso_rate": 0},
+    )
+
     return {
         "holy_symbol_drop": holy_symbol_drop,
         "union_drop": union_drop,
@@ -203,6 +222,9 @@ def get_hunting_bonus_stats(ocid, lookup_date=None):
         "artifact_drop": artifact_drop,
         "artifact_meso": artifact_meso,
         "artifact_active": bool(artifact_effects),
+        "ability_preset_no": best_ability["preset_no"],
+        "ability_drop": best_ability["drop_rate"],
+        "ability_meso": best_ability["meso_rate"],
     }
 
 
