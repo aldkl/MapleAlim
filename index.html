@@ -213,7 +213,7 @@
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 12px;
       margin-bottom: 18px;
     }
@@ -295,7 +295,7 @@
 
     .character-row {
       display: grid;
-      grid-template-columns: minmax(300px, 1.6fr) minmax(96px, 0.8fr) minmax(88px, 0.7fr) minmax(80px, 0.65fr) 88px;
+      grid-template-columns: minmax(270px, 1.5fr) minmax(96px, 0.75fr) minmax(96px, 0.75fr) minmax(88px, 0.65fr) minmax(80px, 0.6fr) 88px;
       gap: 12px;
       align-items: center;
       min-height: 176px;
@@ -2013,9 +2013,14 @@
           <div class="metric-note">예상 수익에서 이번 주 획득 차감</div>
         </article>
         <article class="metric">
+          <div class="metric-label">월간 수익</div>
+          <div class="metric-value blue">0 메소</div>
+          <div class="metric-note">검은 마법사 등 월간 보스 기준</div>
+        </article>
+        <article class="metric">
           <div class="metric-label">완료율</div>
           <div class="metric-value">0%</div>
-          <div class="metric-note">주간 체크리스트 기준</div>
+          <div class="metric-note">일일·주간 TODO, 주간 보스, 계정 TODO 기준 · 검은 마법사 제외</div>
         </article>
       </section>
 
@@ -3116,7 +3121,7 @@
 
     function getBossIncome(characterId) {
       if (!characterId) {
-        return { count: 0, weekly: 0, monthly: 0 };
+        return { count: 0, weekly: 0, monthly: 0, monthlyBoss: 0 };
       }
       return getBossesForCharacter(characterId).reduce((total, boss) => {
         const config = getBossConfig(characterId, boss);
@@ -3129,12 +3134,13 @@
         const income = Math.floor(config.price / config.party);
         if (boss.cycle === "monthly") {
           total.monthly += income;
+          total.monthlyBoss += income;
         } else {
           total.weekly += income;
           total.monthly += income * 4;
         }
         return total;
-      }, { count: 0, weekly: 0, monthly: 0 });
+      }, { count: 0, weekly: 0, monthly: 0, monthlyBoss: 0 });
     }
 
     function getWeeklyLimitBucket(character) {
@@ -3362,7 +3368,7 @@
       const weeklyTodos = getCharacterWeeklyTodos(character).filter((task) => !isTodoTaskExcluded(characterId, "weekly", task.id));
       const regularWeeklyTodos = weeklyTodos.filter((task) => !task.exclusiveGroup);
       const epicDungeonTodos = weeklyTodos.filter((task) => task.exclusiveGroup === "epicDungeon");
-      const activeBossTodos = bossTodos.filter((task) => !isTodoTaskExcluded(characterId, "bosses", task.id));
+      const activeBossTodos = bossTodos.filter((task) => task.type !== "monthlyBosses" && !isTodoTaskExcluded(characterId, "bosses", task.id));
       const total = dailyTodos.length + regularWeeklyTodos.length + (epicDungeonTodos.length ? 1 : 0) + activeBossTodos.length;
       const done = dailyTodos.filter((task) => isTodoDone("daily", characterId, task.id)).length
         + regularWeeklyTodos.filter((task) => isTodoDone("weekly", characterId, task.id)).length
@@ -3390,11 +3396,14 @@
       return summary;
     }
 
-    function getCompletedBossIncome(characterId) {
+    function getCompletedBossIncome(characterId, cycle = "weekly") {
       if (isTodoSectionExcluded(characterId, "bosses")) {
         return 0;
       }
       return getBossesForCharacter(characterId).reduce((total, boss) => {
+        if ((cycle === "monthly") !== (boss.cycle === "monthly")) {
+          return total;
+        }
         const config = getBossConfig(characterId, boss);
         const todoType = boss.cycle === "monthly" ? "monthlyBosses" : "bosses";
         if (!config.selected || isTodoTaskExcluded(characterId, "bosses", boss.id) || !isTodoDone(todoType, characterId, boss.id)) {
@@ -3844,6 +3853,10 @@
             <div class="cell-value gold">${formatMeso(bossIncome.weekly)}</div>
           </div>
           <div>
+            <div class="cell-label">월간 수익</div>
+            <div class="cell-value blue">${formatMeso(bossIncome.monthlyBoss)}</div>
+          </div>
+          <div>
             <div class="cell-label">경험치</div>
             <div class="cell-value blue">${escapeHtml(String(expRate))}%</div>
           </div>
@@ -3910,6 +3923,10 @@
             <div class="cell-value gold">-</div>
           </div>
           <div>
+            <div class="cell-label">월간 수익</div>
+            <div class="cell-value blue">-</div>
+          </div>
+          <div>
             <div class="cell-label">이번 주 획득</div>
             <div class="cell-value blue">-</div>
           </div>
@@ -3948,12 +3965,14 @@
         : renderEmpty();
 
       const totalWeekly = state.characters.reduce((sum, character) => sum + getBossIncome(character.ocid).weekly, 0);
-      const completedBossIncome = state.characters.reduce((sum, character) => sum + getCompletedBossIncome(character.ocid), 0);
+      const totalMonthlyBoss = state.characters.reduce((sum, character) => sum + getBossIncome(character.ocid).monthlyBoss, 0);
+      const completedBossIncome = state.characters.reduce((sum, character) => sum + getCompletedBossIncome(character.ocid, "weekly"), 0);
       const todoSummary = getTodoSummary();
       els.metrics[0].textContent = formatMeso(totalWeekly);
       els.metrics[1].textContent = formatMeso(completedBossIncome);
       els.metrics[2].textContent = formatMeso(Math.max(0, totalWeekly - completedBossIncome));
-      els.metrics[3].textContent = todoSummary.total ? `${Math.round((todoSummary.done / todoSummary.total) * 100)}%` : "0%";
+      els.metrics[3].textContent = formatMeso(totalMonthlyBoss);
+      els.metrics[4].textContent = todoSummary.total ? `${Math.round((todoSummary.done / todoSummary.total) * 100)}%` : "0%";
       renderBossPanel();
       renderAllBossEditor();
       renderTodoGrid();
