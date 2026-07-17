@@ -1760,7 +1760,7 @@
 
     .tool-field {
       display: grid;
-      grid-template-columns: 58px minmax(0, 1fr) 42px;
+      grid-template-columns: 96px minmax(0, 1fr) 58px;
       align-items: center;
       overflow: hidden;
       border-radius: 7px;
@@ -1776,6 +1776,8 @@
       background: #37667b;
       color: #ffffff;
       font-weight: 900;
+      font-size: 11px;
+      white-space: nowrap;
     }
 
     .tool-field input,
@@ -1797,6 +1799,7 @@
     }
 
     .hunting-preset-summary,
+    .hunting-bonus-summary,
     .hunting-results {
       display: grid;
       gap: 8px;
@@ -2218,9 +2221,10 @@
             <div class="tool-group">
               <div class="tool-group-title">추가 획득 설정</div>
               <div class="tool-group-body">
-                <label class="tool-field"><span>추가 드롭</span><input id="huntingExtraDrop" type="number" min="0" value="100"><span>%</span></label>
-                <label class="tool-field"><span>추가 메획</span><input id="huntingExtraMeso" type="number" min="0" value="100"><span>%</span></label>
-                <div class="hunting-note">재획비, 유니온, 아티팩트, 홀리 심볼 등 장비 외 효과의 합계를 입력하세요.</div>
+                <div class="hunting-bonus-summary" id="huntingBonusSummary"></div>
+                <label class="tool-field"><span>직접 추가 드롭</span><input id="huntingExtraDrop" type="number" min="0" value="0"><span>%</span></label>
+                <label class="tool-field"><span>직접 추가 메획</span><input id="huntingExtraMeso" type="number" min="0" value="0"><span>%</span></label>
+                <div class="hunting-note">민생 지원 드롭 24%와 재획비 드롭/메획 20%는 항상 적용합니다. 홀리 심볼, 유니온, 아티팩트는 Nexon API에서 자동으로 가져옵니다.</div>
               </div>
             </div>
           </section>
@@ -2554,6 +2558,7 @@
       huntingProfitView: document.querySelector("#huntingProfitView"),
       huntingCharacterSelect: document.querySelector("#huntingCharacterSelect"),
       huntingPresetSummary: document.querySelector("#huntingPresetSummary"),
+      huntingBonusSummary: document.querySelector("#huntingBonusSummary"),
       huntingEquipmentDrop: document.querySelector("#huntingEquipmentDrop"),
       huntingEquipmentMeso: document.querySelector("#huntingEquipmentMeso"),
       huntingExtraDrop: document.querySelector("#huntingExtraDrop"),
@@ -3883,7 +3888,9 @@
 
     async function ensureHuntingPresets(characterId) {
       const character = state.characters.find((item) => item.ocid === characterId);
-      if (!character?.character_name || Array.isArray(character.hunting_equipment_presets) || huntingPresetLoads.has(characterId)) {
+      const hasEquipment = Array.isArray(character?.hunting_equipment_presets);
+      const hasBonuses = character?.hunting_bonus_stats && typeof character.hunting_bonus_stats === "object";
+      if (!character?.character_name || (hasEquipment && hasBonuses) || huntingPresetLoads.has(characterId)) {
         return;
       }
       if (location.protocol === "file:" || (IS_GITHUB_PAGES && !API_BASE_URL)) {
@@ -3928,13 +3935,14 @@
       state.huntingCharacterId = characterId;
       const character = state.characters.find((item) => item.ocid === characterId);
       const preset = getBestHuntingPreset(character);
+      const bonuses = character?.hunting_bonus_stats || {};
       els.huntingEquipmentDrop.value = preset?.drop_rate || 0;
       els.huntingEquipmentMeso.value = preset?.meso_rate || 0;
       els.huntingMonsterLevel.value = Math.max(1, Number(character?.character_level) || 285);
       els.huntingMesoCap.value = getDefaultMesoCap(character?.character_level);
       if (!character) {
         els.huntingPresetSummary.innerHTML = `<div class="hunting-note">캐릭터를 먼저 등록해 주세요.</div>`;
-      } else if (!Array.isArray(character.hunting_equipment_presets)) {
+      } else if (!Array.isArray(character.hunting_equipment_presets) || !character.hunting_bonus_stats) {
         els.huntingPresetSummary.innerHTML = `<div class="hunting-note">장비 프리셋 정보를 자동으로 불러오는 중입니다.</div>`;
         ensureHuntingPresets(characterId);
       } else {
@@ -3946,6 +3954,13 @@
           <div class="hunting-note">${sources}</div>
         `;
       }
+      els.huntingBonusSummary.innerHTML = `
+        <div class="hunting-result"><span>민생 지원</span><strong>드롭 24%</strong></div>
+        <div class="hunting-result"><span>재물 획득의 비약</span><strong>드롭 20% · 메획 20%</strong></div>
+        <div class="hunting-result"><span>홀리 심볼</span><strong>드롭 ${Number(bonuses.holy_symbol_drop) || 0}%</strong></div>
+        <div class="hunting-result"><span>유니온</span><strong>드롭 ${Number(bonuses.union_drop) || 0}% · 메획 ${Number(bonuses.union_meso) || 0}%</strong></div>
+        <div class="hunting-result"><span>유니온 아티팩트</span><strong>${bonuses.artifact_active === false ? "활성 효과 없음 · " : ""}드롭 ${Number(bonuses.artifact_drop) || 0}% · 메획 ${Number(bonuses.artifact_meso) || 0}%</strong></div>
+      `;
       calculateHuntingProfit();
     }
 
@@ -3964,9 +3979,12 @@
         corePrice: Math.max(0, Number(els.huntingCorePrice.value) || 0),
         fragmentPrice: Math.max(0, Number(els.huntingFragmentPrice.value) || 0),
       };
-      const totalDrop = values.equipmentDrop + values.extraDrop;
-      const totalMeso = values.equipmentMeso + values.extraMeso;
       const character = state.characters.find((item) => item.ocid === state.huntingCharacterId);
+      const bonuses = character?.hunting_bonus_stats || {};
+      const automaticDrop = 24 + 20 + (Number(bonuses.holy_symbol_drop) || 0) + (Number(bonuses.union_drop) || 0) + (Number(bonuses.artifact_drop) || 0);
+      const automaticMeso = 20 + (Number(bonuses.union_meso) || 0) + (Number(bonuses.artifact_meso) || 0);
+      const totalDrop = values.equipmentDrop + values.extraDrop + automaticDrop;
+      const totalMeso = values.equipmentMeso + values.extraMeso + automaticMeso;
       const characterLevel = Number(character?.character_level) || values.monsterLevel;
       const dropMultiplier = Math.min(5, 1 + totalDrop / 100);
       const mesoBagChance = Math.min(1, 0.6 * dropMultiplier);

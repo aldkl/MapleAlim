@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import re
+import time
 from datetime import date, timedelta
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -46,15 +47,33 @@ def request_json(path, params=None):
         url = f"{url}?{query}"
 
     request = Request(url, headers={"x-nxopen-api-key": api_key})
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=15) as response:
+                charset = response.headers.get_content_charset() or "utf-8"
+                return _repair_api_text(json.loads(response.read().decode(charset)))
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            if exc.code == 429 and attempt < 2:
+                time.sleep(0.6 * (attempt + 1))
+                continue
+            raise NexonApiError(f"NEXON API 오류 {exc.code}: {body}") from exc
+        except URLError as exc:
+            raise NexonApiError(f"NEXON API 연결 실패: {exc.reason}") from exc
+
+
+def _repair_api_text(value):
+    if isinstance(value, dict):
+        return {key: _repair_api_text(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_repair_api_text(item) for item in value]
+    if not isinstance(value, str):
+        return value
     try:
-        with urlopen(request, timeout=15) as response:
-            charset = response.headers.get_content_charset() or "utf-8"
-            return json.loads(response.read().decode(charset))
-    except HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise NexonApiError(f"NEXON API 오류 {exc.code}: {body}") from exc
-    except URLError as exc:
-        raise NexonApiError(f"NEXON API 연결 실패: {exc.reason}") from exc
+        repaired = value.encode("latin-1").decode("cp949")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
+    return repaired if any("가" <= char <= "힣" for char in repaired) else value
 
 
 def get_ocid(character_name):
@@ -125,6 +144,68 @@ def get_hunting_equipment_presets(ocid, lookup_date=None):
     return presets
 
 
+def _percent_from_texts(values, keyword):
+    total = 0
+    for value in values or []:
+        text = value.get("name", "") if isinstance(value, dict) else str(value or "")
+        if keyword not in text:
+            continue
+        matches = re.findall(r"(\d+(?:\.\d+)?)\s*%", text)
+        if matches:
+            total += float(matches[-1])
+    return total
+
+
+def _artifact_effect_percent(level):
+    values = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 12]
+    numeric_level = max(0, min(10, int(level or 0)))
+    return values[numeric_level]
+
+
+def get_hunting_bonus_stats(ocid, lookup_date=None):
+    skill_params = {"ocid": ocid, "character_skill_grade": "5"}
+    if lookup_date:
+        skill_params["date"] = lookup_date
+    try:
+        skills = request_json("/character/skill", skill_params).get("character_skill") or []
+    except NexonApiError:
+        skills = []
+    holy_symbol = next((skill for skill in skills if "홀리 심볼" in str(skill.get("skill_name") or "")), None)
+    holy_symbol_drop = _percent_from_texts([holy_symbol.get("skill_effect")], "드롭률") if holy_symbol else 0
+
+    try:
+        union = request_json("/user/union-raider", {"ocid": ocid})
+    except NexonApiError:
+        union = {}
+    union_stats = union.get("union_raider_stat") or []
+    union_drop = _percent_from_texts(union_stats, "아이템 드롭률")
+    union_meso = _percent_from_texts(union_stats, "메소 획득량")
+
+    try:
+        artifact = request_json("/user/union-artifact", {"ocid": ocid})
+    except NexonApiError:
+        artifact = {}
+    artifact_drop = 0
+    artifact_meso = 0
+    artifact_effects = artifact.get("union_artifact_effect") or []
+    for effect in artifact_effects:
+        name = str(effect.get("name") or "")
+        value = _artifact_effect_percent(effect.get("level"))
+        if "아이템 드롭률" in name:
+            artifact_drop += value
+        if "메소 획득량" in name:
+            artifact_meso += value
+
+    return {
+        "holy_symbol_drop": holy_symbol_drop,
+        "union_drop": union_drop,
+        "union_meso": union_meso,
+        "artifact_drop": artifact_drop,
+        "artifact_meso": artifact_meso,
+        "artifact_active": bool(artifact_effects),
+    }
+
+
 def get_character_list():
     data = request_json("/character/list")
     account_list = data.get("account_list")
@@ -152,6 +233,7 @@ def get_character_summary(character_name, lookup_date=None):
     basic = get_character_basic(ocid, lookup_date)
     account = find_character_account(ocid)
     hunting_presets = get_hunting_equipment_presets(ocid, lookup_date)
+    hunting_bonus_stats = get_hunting_bonus_stats(ocid, lookup_date)
     return {
         "ocid": ocid,
         "account_id": account.get("account_id"),
@@ -166,6 +248,7 @@ def get_character_summary(character_name, lookup_date=None):
         "character_guild_name": basic.get("character_guild_name"),
         "character_image": basic.get("character_image"),
         "hunting_equipment_presets": hunting_presets,
+        "hunting_bonus_stats": hunting_bonus_stats,
     }
 
 

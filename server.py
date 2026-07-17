@@ -86,7 +86,7 @@ class MapleAlimHandler(SimpleHTTPRequestHandler):
                     write_character_cache(cache)
                 except NexonApiError:
                     pass
-            if isinstance(cached.get("hunting_equipment_presets"), list):
+            if isinstance(cached.get("hunting_equipment_presets"), list) and isinstance(cached.get("hunting_bonus_stats"), dict):
                 self.write_json({**cached, "cached": True})
                 return
 
