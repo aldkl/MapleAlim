@@ -2064,7 +2064,7 @@
         <article class="metric">
           <div class="metric-label">남은 예상 수익</div>
           <div class="metric-value gold">0 메소</div>
-          <div class="metric-note">예상 수익에서 이번 주 획득 차감</div>
+          <div class="metric-note">주간 보스 수익에서 완료한 보스 차감 · 사냥 제외</div>
         </article>
         <article class="metric">
           <div class="metric-label">월간 수익</div>
@@ -4365,7 +4365,7 @@
       const todoSummary = getTodoSummary();
       els.metrics[0].textContent = formatMeso(totalWeekly);
       els.metrics[1].textContent = formatMeso(completedBossIncome);
-      els.metrics[2].textContent = formatMeso(Math.max(0, totalWeekly - completedBossIncome));
+      els.metrics[2].textContent = formatMeso(Math.max(0, weeklyBossIncome - completedBossIncome));
       els.metrics[3].textContent = formatMeso(totalMonthly);
       els.metrics[4].textContent = todoSummary.total ? `${Math.round((todoSummary.done / todoSummary.total) * 100)}%` : "0%";
       els.weeklyRevenueBreakdown.textContent = `보스 ${formatMeso(weeklyBossIncome)} · 사냥 ${formatMeso(weeklyHuntingIncome)}`;
