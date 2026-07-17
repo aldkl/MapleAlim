@@ -68,10 +68,11 @@ class handler(BaseHTTPRequestHandler):
             self._write_json({"error": str(exc)}, status=502)
             return
 
-        _character_cache[cache_key] = {
-            "stored_at": time.time(),
-            "payload": payload,
-        }
+        if payload.get("hunting_bonus_stats", {}).get("ability_loaded") is True:
+            _character_cache[cache_key] = {
+                "stored_at": time.time(),
+                "payload": payload,
+            }
         if refresh:
             _last_refreshes[cache_key] = now
         self._write_json({**payload, "cached": False})

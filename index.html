@@ -391,6 +391,15 @@
       min-width: 0;
     }
 
+    .cell-breakdown {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 1.45;
+      white-space: nowrap;
+    }
+
     .gold {
       color: var(--gold);
     }
@@ -2036,7 +2045,7 @@
         <article class="metric">
           <div class="metric-label">이번 주 예상 수익</div>
           <div class="metric-value gold">0 메소</div>
-          <div class="metric-note">보스 예상 수익 + 사냥 계획</div>
+          <div class="metric-note" id="weeklyRevenueBreakdown">보스 0 메소 · 사냥 0 메소</div>
         </article>
         <article class="metric">
           <div class="metric-label">이번 주 획득</div>
@@ -2051,7 +2060,7 @@
         <article class="metric">
           <div class="metric-label">월간 수익</div>
           <div class="metric-value blue">0 메소</div>
-          <div class="metric-note">보스 월간 환산 + 30일 사냥 계획</div>
+          <div class="metric-note" id="monthlyRevenueBreakdown">보스 0 메소 · 사냥 0 메소</div>
         </article>
         <article class="metric">
           <div class="metric-label">완료율</div>
@@ -2548,6 +2557,8 @@
       list: document.querySelector("#characterList"),
       message: document.querySelector("#message"),
       metrics: document.querySelectorAll(".metric-value"),
+      weeklyRevenueBreakdown: document.querySelector("#weeklyRevenueBreakdown"),
+      monthlyRevenueBreakdown: document.querySelector("#monthlyRevenueBreakdown"),
       bossSelect: document.querySelector("#bossCharacterSelect"),
       bossList: document.querySelector("#bossList"),
       bossCount: document.querySelector("#bossCount"),
@@ -3913,7 +3924,9 @@
       const hasEquipment = Array.isArray(character?.hunting_equipment_presets);
       const hasBonuses = character?.hunting_bonus_stats
         && typeof character.hunting_bonus_stats === "object"
-        && Array.isArray(character.hunting_bonus_stats.ability_presets);
+        && Array.isArray(character.hunting_bonus_stats.ability_presets)
+        && character.hunting_bonus_stats.ability_loaded === true
+        && Object.hasOwn(character.hunting_bonus_stats, "challengers_sapphire_plus");
       if (!character?.character_name || (hasEquipment && hasBonuses) || huntingPresetLoads.has(characterId)) {
         return;
       }
@@ -3957,11 +3970,10 @@
 
     function getHuntingAutomaticRates(character, settings) {
       const bonuses = character?.hunting_bonus_stats || {};
-      const challengersBonus = String(character?.world_name || "").startsWith("챌린저스") ? 20 : 0;
       const ability = (bonuses.ability_presets || []).find((item) => Number(item.preset_no) === Number(settings?.abilityPresetNo)) || {};
       return {
-        drop: 24 + 20 + challengersBonus + (Number(bonuses.holy_symbol_drop) || 0) + (Number(bonuses.union_drop) || 0) + (Number(bonuses.artifact_drop) || 0) + (Number(ability.drop_rate) || 0),
-        meso: 20 + challengersBonus + (Number(bonuses.union_meso) || 0) + (Number(bonuses.artifact_meso) || 0) + (Number(ability.meso_rate) || 0),
+        drop: 24 + 20 + (Number(bonuses.challengers_drop) || 0) + (Number(bonuses.holy_symbol_drop) || 0) + (Number(bonuses.union_drop) || 0) + (Number(bonuses.artifact_drop) || 0) + (Number(ability.drop_rate) || 0),
+        meso: 20 + (Number(bonuses.challengers_meso) || 0) + (Number(bonuses.union_meso) || 0) + (Number(bonuses.artifact_meso) || 0) + (Number(ability.meso_rate) || 0),
       };
     }
 
@@ -4023,7 +4035,6 @@
       const character = state.characters.find((item) => item.ocid === characterId);
       const preset = getBestHuntingPreset(character);
       const bonuses = character?.hunting_bonus_stats || {};
-      const isChallengersWorld = String(character?.world_name || "").startsWith("챌린저스");
       const settings = getCharacterHuntingSettings(character);
       const abilityPresets = Array.isArray(bonuses.ability_presets) ? bonuses.ability_presets : [];
       els.huntingAbilityPreset.innerHTML = abilityPresets.length
@@ -4065,7 +4076,7 @@
         <div class="hunting-result"><span>유니온</span><strong>드롭 ${Number(bonuses.union_drop) || 0}% · 메획 ${Number(bonuses.union_meso) || 0}%</strong></div>
         <div class="hunting-result"><span>유니온 아티팩트</span><strong>${bonuses.artifact_active === false ? "활성 효과 없음 · " : ""}드롭 ${Number(bonuses.artifact_drop) || 0}% · 메획 ${Number(bonuses.artifact_meso) || 0}%</strong></div>
         <div class="hunting-result" data-hunting-ability><span>선택 어빌리티 ${Number(settings.abilityPresetNo) || "-"}번</span><strong>드롭 ${Number(selectedAbility.drop_rate) || 0}% · 메획 ${Number(selectedAbility.meso_rate) || 0}%</strong></div>
-        <div class="hunting-result"><span>챌린저스 사파이어+</span><strong>${isChallengersWorld ? "드롭 20% · 메획 20%" : "해당 없음"}</strong></div>
+        <div class="hunting-result"><span>${escapeHtml(bonuses.challengers_skill_name || "챌린저스")}</span><strong>${bonuses.challengers_sapphire_plus ? "드롭 20% · 메획 20%" : "사파이어 효과 없음"}</strong></div>
       `;
       calculateHuntingProfit();
     }
@@ -4153,10 +4164,12 @@
           <div>
             <div class="cell-label">주간 수익</div>
             <div class="cell-value gold">${formatMeso(bossIncome.weekly + huntingIncome.weeklyIncome)}</div>
+            <div class="cell-breakdown">보스 ${formatMeso(bossIncome.weekly)}<br>사냥 ${formatMeso(huntingIncome.weeklyIncome)}</div>
           </div>
           <div>
             <div class="cell-label">월간 수익</div>
             <div class="cell-value blue">${formatMeso(bossIncome.monthly + huntingIncome.monthlyIncome)}</div>
+            <div class="cell-breakdown">보스 ${formatMeso(bossIncome.monthly)}<br>사냥 ${formatMeso(huntingIncome.monthlyIncome)}</div>
           </div>
           <div>
             <div class="cell-label">경험치</div>
@@ -4257,12 +4270,12 @@
     }
 
     function renderSummaryMetrics() {
-      const totalWeekly = state.characters.reduce((sum, character) => {
-        return sum + getBossIncome(character.ocid).weekly + getSettlementHuntingProjection(character).weeklyIncome;
-      }, 0);
-      const totalMonthly = state.characters.reduce((sum, character) => {
-        return sum + getBossIncome(character.ocid).monthly + getSettlementHuntingProjection(character).monthlyIncome;
-      }, 0);
+      const weeklyBossIncome = state.characters.reduce((sum, character) => sum + getBossIncome(character.ocid).weekly, 0);
+      const weeklyHuntingIncome = state.characters.reduce((sum, character) => sum + getSettlementHuntingProjection(character).weeklyIncome, 0);
+      const monthlyBossIncome = state.characters.reduce((sum, character) => sum + getBossIncome(character.ocid).monthly, 0);
+      const monthlyHuntingIncome = state.characters.reduce((sum, character) => sum + getSettlementHuntingProjection(character).monthlyIncome, 0);
+      const totalWeekly = weeklyBossIncome + weeklyHuntingIncome;
+      const totalMonthly = monthlyBossIncome + monthlyHuntingIncome;
       const completedBossIncome = state.characters.reduce((sum, character) => sum + getCompletedBossIncome(character.ocid, "weekly"), 0);
       const todoSummary = getTodoSummary();
       els.metrics[0].textContent = formatMeso(totalWeekly);
@@ -4270,6 +4283,8 @@
       els.metrics[2].textContent = formatMeso(Math.max(0, totalWeekly - completedBossIncome));
       els.metrics[3].textContent = formatMeso(totalMonthly);
       els.metrics[4].textContent = todoSummary.total ? `${Math.round((todoSummary.done / todoSummary.total) * 100)}%` : "0%";
+      els.weeklyRevenueBreakdown.textContent = `보스 ${formatMeso(weeklyBossIncome)} · 사냥 ${formatMeso(weeklyHuntingIncome)}`;
+      els.monthlyRevenueBreakdown.textContent = `보스 ${formatMeso(monthlyBossIncome)} · 사냥 ${formatMeso(monthlyHuntingIncome)}`;
     }
 
     function render() {
