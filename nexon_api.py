@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import re
 from datetime import date, timedelta
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -71,6 +72,59 @@ def get_character_basic(ocid, lookup_date=None):
     return request_json("/character/basic", params)
 
 
+def get_character_item_equipment(ocid, lookup_date=None):
+    params = {"ocid": ocid}
+    if lookup_date:
+        params["date"] = lookup_date
+    return request_json("/character/item-equipment", params)
+
+
+def _potential_percent(option, keyword):
+    text = str(option or "")
+    if keyword not in text:
+        return 0
+    match = re.search(r"(\d+)\s*%", text)
+    return int(match.group(1)) if match else 0
+
+
+def get_hunting_equipment_presets(ocid, lookup_date=None):
+    equipment = get_character_item_equipment(ocid, lookup_date)
+    current_preset = int(equipment.get("preset_no") or 1)
+    presets = []
+    for preset_no in range(1, 4):
+        items = equipment.get(f"item_equipment_preset_{preset_no}") or []
+        drop_rate = 0
+        meso_rate = 0
+        sources = []
+        for item in items:
+            item_drop = 0
+            item_meso = 0
+            for field in (
+                "potential_option_1", "potential_option_2", "potential_option_3",
+                "additional_potential_option_1", "additional_potential_option_2", "additional_potential_option_3",
+            ):
+                option = item.get(field)
+                item_drop += _potential_percent(option, "아이템 드롭률")
+                item_meso += _potential_percent(option, "메소 획득량")
+            drop_rate += item_drop
+            meso_rate += item_meso
+            if item_drop or item_meso:
+                sources.append({
+                    "slot": item.get("item_equipment_slot"),
+                    "name": item.get("item_name"),
+                    "drop_rate": item_drop,
+                    "meso_rate": item_meso,
+                })
+        presets.append({
+            "preset_no": preset_no,
+            "is_current": preset_no == current_preset,
+            "drop_rate": drop_rate,
+            "meso_rate": meso_rate,
+            "sources": sources,
+        })
+    return presets
+
+
 def get_character_list():
     data = request_json("/character/list")
     account_list = data.get("account_list")
@@ -97,6 +151,7 @@ def get_character_summary(character_name, lookup_date=None):
     ocid = get_ocid(character_name)
     basic = get_character_basic(ocid, lookup_date)
     account = find_character_account(ocid)
+    hunting_presets = get_hunting_equipment_presets(ocid, lookup_date)
     return {
         "ocid": ocid,
         "account_id": account.get("account_id"),
@@ -110,6 +165,7 @@ def get_character_summary(character_name, lookup_date=None):
         "character_exp_rate": basic.get("character_exp_rate"),
         "character_guild_name": basic.get("character_guild_name"),
         "character_image": basic.get("character_image"),
+        "hunting_equipment_presets": hunting_presets,
     }
 
 
