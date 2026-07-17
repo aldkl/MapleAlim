@@ -2221,6 +2221,7 @@
             <div class="tool-group">
               <div class="tool-group-title">추가 획득 설정</div>
               <div class="tool-group-body">
+                <label class="tool-field"><span>어빌리티</span><select id="huntingAbilityPreset" aria-label="사냥 어빌리티 프리셋"></select><span>프리셋</span></label>
                 <div class="hunting-bonus-summary" id="huntingBonusSummary"></div>
                 <label class="tool-field"><span>직접 추가 드롭</span><input id="huntingExtraDrop" type="number" min="0" value="0"><span>%</span></label>
                 <label class="tool-field"><span>직접 추가 메획</span><input id="huntingExtraMeso" type="number" min="0" value="0"><span>%</span></label>
@@ -2563,6 +2564,7 @@
       huntingCharacterSelect: document.querySelector("#huntingCharacterSelect"),
       huntingPresetSummary: document.querySelector("#huntingPresetSummary"),
       huntingBonusSummary: document.querySelector("#huntingBonusSummary"),
+      huntingAbilityPreset: document.querySelector("#huntingAbilityPreset"),
       huntingEquipmentDrop: document.querySelector("#huntingEquipmentDrop"),
       huntingEquipmentMeso: document.querySelector("#huntingEquipmentMeso"),
       huntingExtraDrop: document.querySelector("#huntingExtraDrop"),
@@ -3911,7 +3913,7 @@
       const hasEquipment = Array.isArray(character?.hunting_equipment_presets);
       const hasBonuses = character?.hunting_bonus_stats
         && typeof character.hunting_bonus_stats === "object"
-        && Object.hasOwn(character.hunting_bonus_stats, "ability_drop");
+        && Array.isArray(character.hunting_bonus_stats.ability_presets);
       if (!character?.character_name || (hasEquipment && hasBonuses) || huntingPresetLoads.has(characterId)) {
         return;
       }
@@ -3953,12 +3955,13 @@
       return higherPenalty[difference] ?? lowerPenalty[difference] ?? 1;
     }
 
-    function getHuntingAutomaticRates(character) {
+    function getHuntingAutomaticRates(character, settings) {
       const bonuses = character?.hunting_bonus_stats || {};
       const challengersBonus = String(character?.world_name || "").startsWith("챌린저스") ? 20 : 0;
+      const ability = (bonuses.ability_presets || []).find((item) => Number(item.preset_no) === Number(settings?.abilityPresetNo)) || {};
       return {
-        drop: 24 + 20 + challengersBonus + (Number(bonuses.holy_symbol_drop) || 0) + (Number(bonuses.union_drop) || 0) + (Number(bonuses.artifact_drop) || 0) + (Number(bonuses.ability_drop) || 0),
-        meso: 20 + challengersBonus + (Number(bonuses.union_meso) || 0) + (Number(bonuses.artifact_meso) || 0) + (Number(bonuses.ability_meso) || 0),
+        drop: 24 + 20 + challengersBonus + (Number(bonuses.holy_symbol_drop) || 0) + (Number(bonuses.union_drop) || 0) + (Number(bonuses.artifact_drop) || 0) + (Number(ability.drop_rate) || 0),
+        meso: 20 + challengersBonus + (Number(bonuses.union_meso) || 0) + (Number(bonuses.artifact_meso) || 0) + (Number(ability.meso_rate) || 0),
       };
     }
 
@@ -3979,12 +3982,13 @@
         fragmentRate: 0.02,
         corePrice: 1000000,
         fragmentPrice: 6000000,
+        abilityPresetNo: Number(character?.hunting_bonus_stats?.ability_current_preset_no) || Number(character?.hunting_bonus_stats?.ability_preset_no) || 1,
       };
       return { ...defaults, ...(state.huntingSettings[character?.ocid] || {}) };
     }
 
     function getHuntingProjection(character, settings = getCharacterHuntingSettings(character)) {
-      const automatic = getHuntingAutomaticRates(character);
+      const automatic = getHuntingAutomaticRates(character, settings);
       const totalDrop = Number(settings.equipmentDrop) + Number(settings.extraDrop) + automatic.drop;
       const totalMeso = Number(settings.equipmentMeso) + Number(settings.extraMeso) + automatic.meso;
       const dropMultiplier = Math.min(5, 1 + totalDrop / 100);
@@ -4021,6 +4025,11 @@
       const bonuses = character?.hunting_bonus_stats || {};
       const isChallengersWorld = String(character?.world_name || "").startsWith("챌린저스");
       const settings = getCharacterHuntingSettings(character);
+      const abilityPresets = Array.isArray(bonuses.ability_presets) ? bonuses.ability_presets : [];
+      els.huntingAbilityPreset.innerHTML = abilityPresets.length
+        ? abilityPresets.map((item) => `<option value="${item.preset_no}"${Number(item.preset_no) === Number(settings.abilityPresetNo) ? " selected" : ""}>${item.preset_no}번 · 드롭 ${Number(item.drop_rate) || 0}% · 메획 ${Number(item.meso_rate) || 0}%</option>`).join("")
+        : `<option value="1">프리셋 정보 없음</option>`;
+      const selectedAbility = abilityPresets.find((item) => Number(item.preset_no) === Number(settings.abilityPresetNo)) || {};
       els.huntingEquipmentDrop.value = settings.equipmentDrop;
       els.huntingEquipmentMeso.value = settings.equipmentMeso;
       els.huntingExtraDrop.value = settings.extraDrop;
@@ -4055,7 +4064,7 @@
         <div class="hunting-result"><span>홀리 심볼</span><strong>드롭 ${Number(bonuses.holy_symbol_drop) || 0}%</strong></div>
         <div class="hunting-result"><span>유니온</span><strong>드롭 ${Number(bonuses.union_drop) || 0}% · 메획 ${Number(bonuses.union_meso) || 0}%</strong></div>
         <div class="hunting-result"><span>유니온 아티팩트</span><strong>${bonuses.artifact_active === false ? "활성 효과 없음 · " : ""}드롭 ${Number(bonuses.artifact_drop) || 0}% · 메획 ${Number(bonuses.artifact_meso) || 0}%</strong></div>
-        <div class="hunting-result"><span>어빌리티 ${Number(bonuses.ability_preset_no) || "-"}번</span><strong>드롭 ${Number(bonuses.ability_drop) || 0}% · 메획 ${Number(bonuses.ability_meso) || 0}%</strong></div>
+        <div class="hunting-result" data-hunting-ability><span>선택 어빌리티 ${Number(settings.abilityPresetNo) || "-"}번</span><strong>드롭 ${Number(selectedAbility.drop_rate) || 0}% · 메획 ${Number(selectedAbility.meso_rate) || 0}%</strong></div>
         <div class="hunting-result"><span>챌린저스 사파이어+</span><strong>${isChallengersWorld ? "드롭 20% · 메획 20%" : "해당 없음"}</strong></div>
       `;
       calculateHuntingProfit();
@@ -4082,10 +4091,16 @@
         fragmentRate: Math.max(0, Number(els.huntingFragmentRate.value) || 0),
         corePrice: Math.max(0, Number(els.huntingCorePrice.value) || 0),
         fragmentPrice: Math.max(0, Number(els.huntingFragmentPrice.value) || 0),
+        abilityPresetNo: Math.max(1, Math.min(3, Number(els.huntingAbilityPreset.value) || 1)),
       };
       state.huntingSettings[character.ocid] = settings;
       saveHuntingSettings();
       const projection = getHuntingProjection(character, settings);
+      const selectedAbility = (character.hunting_bonus_stats?.ability_presets || []).find((item) => Number(item.preset_no) === settings.abilityPresetNo) || {};
+      const abilityRow = els.huntingBonusSummary.querySelector("[data-hunting-ability]");
+      if (abilityRow) {
+        abilityRow.innerHTML = `<span>선택 어빌리티 ${settings.abilityPresetNo}번</span><strong>드롭 ${Number(selectedAbility.drop_rate) || 0}% · 메획 ${Number(selectedAbility.meso_rate) || 0}%</strong>`;
+      }
       const totalMinutes = Math.round(projection.hours * 60);
       els.huntingResults.innerHTML = `
         <div class="hunting-result"><span>적용 드롭률 / 메획</span><strong>${projection.totalDrop.toLocaleString("ko-KR")}% / ${projection.totalMeso.toLocaleString("ko-KR")}%</strong></div>
@@ -5051,6 +5066,7 @@
     [
       els.huntingEquipmentDrop,
       els.huntingEquipmentMeso,
+      els.huntingAbilityPreset,
       els.huntingExtraDrop,
       els.huntingExtraMeso,
       els.huntingMonsterLevel,

@@ -225,6 +225,8 @@ def get_hunting_bonus_stats(ocid, lookup_date=None):
         "ability_preset_no": best_ability["preset_no"],
         "ability_drop": best_ability["drop_rate"],
         "ability_meso": best_ability["meso_rate"],
+        "ability_current_preset_no": int(ability.get("preset_no") or best_ability["preset_no"] or 1),
+        "ability_presets": ability_presets,
     }
 
 
