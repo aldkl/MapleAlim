@@ -87,7 +87,7 @@ class MapleAlimHandler(SimpleHTTPRequestHandler):
                 except NexonApiError:
                     pass
             bonus_stats = cached.get("hunting_bonus_stats")
-            if isinstance(cached.get("hunting_equipment_presets"), list) and isinstance(bonus_stats, dict) and bonus_stats.get("ability_loaded") is True and "challengers_sapphire_plus" in bonus_stats:
+            if isinstance(cached.get("hunting_equipment_presets"), list) and isinstance(bonus_stats, dict) and bonus_stats.get("ability_loaded") is True and bonus_stats.get("challengers_loaded") is True:
                 self.write_json({**cached, "cached": True})
                 return
 
@@ -97,7 +97,7 @@ class MapleAlimHandler(SimpleHTTPRequestHandler):
             self.write_json({"error": str(exc)}, status=502)
             return
 
-        if data.get("hunting_bonus_stats", {}).get("ability_loaded") is True:
+        if data.get("hunting_bonus_stats", {}).get("ability_loaded") is True and data.get("hunting_bonus_stats", {}).get("challengers_loaded") is True:
             cache[cache_key] = {**data, "cached": False}
             write_character_cache(cache)
         if refresh:

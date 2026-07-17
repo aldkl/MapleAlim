@@ -163,6 +163,26 @@ def _artifact_effect_percent(level):
 
 
 def get_hunting_bonus_stats(ocid, lookup_date=None):
+    ability_loaded = True
+    try:
+        ability = request_json("/character/ability", {"ocid": ocid})
+    except NexonApiError:
+        ability = {}
+        ability_loaded = False
+
+    beginner_params = {"ocid": ocid, "character_skill_grade": "0"}
+    if lookup_date:
+        beginner_params["date"] = lookup_date
+    challengers_loaded = True
+    try:
+        beginner_skills = request_json("/character/skill", beginner_params).get("character_skill") or []
+    except NexonApiError:
+        beginner_skills = []
+        challengers_loaded = False
+    challengers_skill = next((skill for skill in beginner_skills if str(skill.get("skill_name") or "").startswith("챌린저스") and "패스" not in str(skill.get("skill_name") or "")), None)
+    challengers_name = str(challengers_skill.get("skill_name") or "") if challengers_skill else ""
+    challengers_sapphire_plus = challengers_name == "챌린저스"
+
     skill_params = {"ocid": ocid, "character_skill_grade": "5"}
     if lookup_date:
         skill_params["date"] = lookup_date
@@ -172,17 +192,6 @@ def get_hunting_bonus_stats(ocid, lookup_date=None):
         skills = []
     holy_symbol = next((skill for skill in skills if "홀리 심볼" in str(skill.get("skill_name") or "")), None)
     holy_symbol_drop = _percent_from_texts([holy_symbol.get("skill_effect")], "드롭률") if holy_symbol else 0
-
-    beginner_params = {"ocid": ocid, "character_skill_grade": "0"}
-    if lookup_date:
-        beginner_params["date"] = lookup_date
-    try:
-        beginner_skills = request_json("/character/skill", beginner_params).get("character_skill") or []
-    except NexonApiError:
-        beginner_skills = []
-    challengers_skill = next((skill for skill in beginner_skills if str(skill.get("skill_name") or "").startswith("챌린저스") and "패스" not in str(skill.get("skill_name") or "")), None)
-    challengers_name = str(challengers_skill.get("skill_name") or "") if challengers_skill else ""
-    challengers_sapphire_plus = challengers_name == "챌린저스"
 
     try:
         union = request_json("/user/union-raider", {"ocid": ocid})
@@ -207,12 +216,6 @@ def get_hunting_bonus_stats(ocid, lookup_date=None):
         if "메소 획득량" in name:
             artifact_meso += value
 
-    ability_loaded = True
-    try:
-        ability = request_json("/character/ability", {"ocid": ocid})
-    except NexonApiError:
-        ability = {}
-        ability_loaded = False
     ability_presets = []
     for preset_no in range(1, 4):
         preset = ability.get(f"ability_preset_{preset_no}") or {}
@@ -237,6 +240,7 @@ def get_hunting_bonus_stats(ocid, lookup_date=None):
         "artifact_active": bool(artifact_effects),
         "challengers_skill_name": challengers_name,
         "challengers_sapphire_plus": challengers_sapphire_plus,
+        "challengers_loaded": challengers_loaded,
         "challengers_drop": 20 if challengers_sapphire_plus else 0,
         "challengers_meso": 20 if challengers_sapphire_plus else 0,
         "ability_preset_no": best_ability["preset_no"],

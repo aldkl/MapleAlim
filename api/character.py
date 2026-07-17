@@ -68,7 +68,7 @@ class handler(BaseHTTPRequestHandler):
             self._write_json({"error": str(exc)}, status=502)
             return
 
-        if payload.get("hunting_bonus_stats", {}).get("ability_loaded") is True:
+        if payload.get("hunting_bonus_stats", {}).get("ability_loaded") is True and payload.get("hunting_bonus_stats", {}).get("challengers_loaded") is True:
             _character_cache[cache_key] = {
                 "stored_at": time.time(),
                 "payload": payload,
