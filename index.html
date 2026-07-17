@@ -4036,6 +4036,28 @@
       return merged;
     }
 
+    const FRAGMENT_EXPECTATION_AT_1900 = [
+      [0, 4.04], [67, 6.11], [100, 6.84], [110, 7.03], [120, 7.22], [130, 7.40],
+      [140, 7.57], [150, 7.74], [160, 7.90], [170, 8.05], [180, 8.19], [190, 8.34],
+      [200, 8.47], [210, 8.61], [220, 8.73], [230, 8.86], [240, 8.98], [250, 9.10],
+      [260, 9.21], [270, 9.32], [280, 9.43], [290, 9.53], [300, 9.63], [310, 9.73],
+      [320, 9.83],
+    ];
+
+    function interpolateFragmentExpectation(dropRate) {
+      const rate = Math.max(0, Number(dropRate) || 0);
+      const upperIndex = FRAGMENT_EXPECTATION_AT_1900.findIndex(([point]) => point >= rate);
+      if (upperIndex === 0) return FRAGMENT_EXPECTATION_AT_1900[0][1];
+      if (upperIndex < 0) {
+        const [previousRate, previousValue] = FRAGMENT_EXPECTATION_AT_1900.at(-2);
+        const [lastRate, lastValue] = FRAGMENT_EXPECTATION_AT_1900.at(-1);
+        return lastValue + (rate - lastRate) * (lastValue - previousValue) / (lastRate - previousRate);
+      }
+      const [lowerRate, lowerValue] = FRAGMENT_EXPECTATION_AT_1900[upperIndex - 1];
+      const [upperRate, upperValue] = FRAGMENT_EXPECTATION_AT_1900[upperIndex];
+      return lowerValue + (rate - lowerRate) * (upperValue - lowerValue) / (upperRate - lowerRate);
+    }
+
     function getHuntingProjection(character, settings = getCharacterHuntingSettings(character)) {
       const automatic = getHuntingAutomaticRates(character, settings);
       const totalDrop = Number(settings.equipmentDrop) + Number(settings.extraDrop) + automatic.drop;
@@ -4052,17 +4074,21 @@
       const baseMesoPerKill = Number(settings.monsterLevel) * Number(settings.baseMeso) * levelMultiplier;
       const hours = Math.max(0, Math.floor(Number(settings.dailyUnits) || 0)) * 0.5;
       const huntingKills = Math.floor(hours * Math.max(1, Number(settings.killsPerSix)) * 10);
-      const targetBaseMeso = Math.min(Number(settings.mesoCap), huntingKills * baseMesoPerKill);
-      const requiredKills = baseMesoPerKill > 0 ? Math.ceil(Number(settings.mesoCap) / baseMesoPerKill) : 0;
+      const mesoBagDropChance = Math.min(1, 0.6 * (1 + effectiveDrop / 100));
+      const expectedBaseMesoPerKill = baseMesoPerKill * mesoBagDropChance;
+      const targetBaseMeso = Math.min(Number(settings.mesoCap), huntingKills * expectedBaseMesoPerKill);
+      const requiredKills = expectedBaseMesoPerKill > 0 ? Math.ceil(Number(settings.mesoCap) / expectedBaseMesoPerKill) : 0;
       const capRate = Number(settings.mesoCap) > 0 ? Math.min(100, targetBaseMeso / Number(settings.mesoCap) * 100) : 0;
       const coreCount = huntingKills * (Number(settings.coreRate) / 100) * dropMultiplier;
-      const fragmentCount = Number(settings.monsterLevel) >= 260 ? huntingKills * (Number(settings.fragmentRate) / 100) * dropMultiplier : 0;
+      const fragmentRateScale = Number(settings.fragmentRate) / 0.0425;
+      const fragmentPerHalfHour = interpolateFragmentExpectation(effectiveDrop) * (Number(settings.killsPerSix) / 1900) * fragmentRateScale;
+      const fragmentCount = Number(settings.monsterLevel) >= 260 ? fragmentPerHalfHour * Math.max(0, Math.floor(Number(settings.dailyUnits) || 0)) : 0;
       const finalMesoIncome = targetBaseMeso * mesoMultiplier;
       const itemIncome = coreCount * Number(settings.corePrice) + fragmentCount * Number(settings.fragmentPrice);
       const dailyIncome = finalMesoIncome + itemIncome;
       const weeklyDays = Math.max(0, Math.min(7, Number(settings.weeklyDays)));
       return {
-        baseAcquisitionRate, totalDrop, totalMeso, finalDropRate, finalMesoRate, effectiveDrop, effectiveMeso, wealthPotionMultiplier, levelMultiplier, targetBaseMeso, requiredKills, huntingKills, hours, capRate, coreCount, fragmentCount,
+        baseAcquisitionRate, totalDrop, totalMeso, finalDropRate, finalMesoRate, effectiveDrop, effectiveMeso, wealthPotionMultiplier, levelMultiplier, mesoBagDropChance, targetBaseMeso, requiredKills, huntingKills, hours, capRate, coreCount, fragmentCount, fragmentPerHalfHour,
         finalMesoIncome, itemIncome, dailyIncome,
         weeklyIncome: dailyIncome * weeklyDays,
         monthlyIncome: dailyIncome * (weeklyDays / 7) * 30,
@@ -4173,12 +4199,13 @@
         <div class="hunting-result"><span>정산 반영</span><strong>${settings.enabled ? "포함" : "미포함"}</strong></div>
         <div class="hunting-result"><span>일일 사냥 목표</span><strong>소재비 ${settings.dailyUnits}개 (${Math.floor(totalMinutes / 60)}시간 ${totalMinutes % 60}분) · 주 ${settings.weeklyDays}일 · 메제 ${projection.capRate.toFixed(1)}%</strong></div>
         <div class="hunting-result"><span>일일 사냥 마릿수</span><strong>${projection.huntingKills.toLocaleString("ko-KR")}마리 · ${Math.floor(totalMinutes / 60)}시간 ${totalMinutes % 60}분</strong></div>
+        <div class="hunting-result"><span>메소 주머니 드롭 확률</span><strong>${(projection.mesoBagDropChance * 100).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%${projection.effectiveDrop >= 67 ? " · 확정 드롭" : ""}</strong></div>
         <div class="hunting-result"><span>메획 적용 사냥 메소</span><strong>${formatMeso(projection.finalMesoIncome)}</strong></div>
         <div class="hunting-result"><span>코어 젬스톤 기대값</span><strong>${projection.coreCount.toFixed(1)}개 · ${formatMeso(projection.coreCount * settings.corePrice)}</strong></div>
-        <div class="hunting-result"><span>솔 에르다 조각 기대값</span><strong>${projection.fragmentCount.toFixed(1)}개 · ${formatMeso(projection.fragmentCount * settings.fragmentPrice)}</strong></div>
+        <div class="hunting-result"><span>솔 에르다 조각 기대값</span><strong>${projection.fragmentCount.toFixed(1)}개 · 30분당 ${projection.fragmentPerHalfHour.toFixed(2)}개 · ${formatMeso(projection.fragmentCount * settings.fragmentPrice)}</strong></div>
         <div class="hunting-result"><span>일일 총 예상 수익</span><strong>${formatMeso(projection.dailyIncome)}</strong></div>
         <div class="hunting-result"><span>주간 / 월간 사냥 수익</span><strong>${formatMeso(projection.weeklyIncome)} / ${formatMeso(projection.monthlyIncome)}</strong></div>
-        <div class="hunting-note">메획을 바꿔도 기본 메소 제한까지 필요한 마릿수와 시간은 변하지 않습니다. 기대값은 장기 평균이며 실제 드롭 수량과 다를 수 있습니다.</div>
+        <div class="hunting-note">메소 주머니는 기본 드롭 확률 60%에 최종 추가 드롭률을 적용하며 67%부터 확정 드롭으로 계산합니다. 조각은 제공된 30분 기대값 표를 드롭률 구간별로 보간한 장기 평균입니다.</div>
       `;
       renderSummaryMetrics();
       els.list.innerHTML = state.characters.length ? state.characters.map(renderCharacter).join("") : renderEmpty();
