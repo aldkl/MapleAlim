@@ -86,8 +86,9 @@ class MapleAlimHandler(SimpleHTTPRequestHandler):
                     write_character_cache(cache)
                 except NexonApiError:
                     pass
-            self.write_json({**cached, "cached": True})
-            return
+            if isinstance(cached.get("hunting_equipment_presets"), list):
+                self.write_json({**cached, "cached": True})
+                return
 
         try:
             data = get_character_summary(name, lookup_date)
