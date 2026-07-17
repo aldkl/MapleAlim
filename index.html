@@ -4033,11 +4033,14 @@
       const automatic = getHuntingAutomaticRates(character, settings);
       const totalDrop = Number(settings.equipmentDrop) + Number(settings.extraDrop) + automatic.drop;
       const totalMeso = Number(settings.equipmentMeso) + Number(settings.extraMeso) + automatic.meso;
+      const baseAcquisitionRate = 100;
       const wealthPotionMultiplier = 1.2;
-      const dropMultiplier = Math.min(5, (1 + totalDrop / 100) * wealthPotionMultiplier);
-      const effectiveDrop = (dropMultiplier - 1) * 100;
-      const mesoMultiplier = (1 + totalMeso / 100) * wealthPotionMultiplier;
-      const effectiveMeso = (mesoMultiplier - 1) * 100;
+      const finalDropRate = Math.min(500, (baseAcquisitionRate + totalDrop) * wealthPotionMultiplier);
+      const effectiveDrop = finalDropRate - baseAcquisitionRate;
+      const dropMultiplier = finalDropRate / baseAcquisitionRate;
+      const finalMesoRate = (baseAcquisitionRate + totalMeso) * wealthPotionMultiplier;
+      const effectiveMeso = finalMesoRate - baseAcquisitionRate;
+      const mesoMultiplier = finalMesoRate / baseAcquisitionRate;
       const levelMultiplier = getMesoLevelMultiplier(Number(character?.character_level) || Number(settings.monsterLevel), Number(settings.monsterLevel));
       const baseMesoPerKill = Number(settings.monsterLevel) * Number(settings.baseMeso) * levelMultiplier;
       const hours = Math.max(0, Math.floor(Number(settings.dailyUnits) || 0)) * 0.5;
@@ -4052,7 +4055,7 @@
       const dailyIncome = finalMesoIncome + itemIncome;
       const weeklyDays = Math.max(0, Math.min(7, Number(settings.weeklyDays)));
       return {
-        totalDrop, totalMeso, effectiveDrop, effectiveMeso, wealthPotionMultiplier, levelMultiplier, targetBaseMeso, requiredKills, huntingKills, hours, capRate, coreCount, fragmentCount,
+        baseAcquisitionRate, totalDrop, totalMeso, finalDropRate, finalMesoRate, effectiveDrop, effectiveMeso, wealthPotionMultiplier, levelMultiplier, targetBaseMeso, requiredKills, huntingKills, hours, capRate, coreCount, fragmentCount,
         finalMesoIncome, itemIncome, dailyIncome,
         weeklyIncome: dailyIncome * weeklyDays,
         monthlyIncome: dailyIncome * (weeklyDays / 7) * 30,
@@ -4157,8 +4160,8 @@
       }
       const totalMinutes = Math.round(projection.hours * 60);
       els.huntingResults.innerHTML = `
-        <div class="hunting-result"><span>최종 드롭률 / 메획</span><strong>${projection.effectiveDrop.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}% / ${projection.effectiveMeso.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%</strong></div>
-        <div class="hunting-note">재획비 전 합산: 드롭 ${projection.totalDrop}% · 메획 ${projection.totalMeso}%. 적용식: (100% + 합산 수치) × ${projection.wealthPotionMultiplier} - 100%. 예: 합산 80% → 최종 116%.</div>
+        <div class="hunting-result"><span>최종 추가 드롭률 / 메획</span><strong>${projection.effectiveDrop.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}% / ${projection.effectiveMeso.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%</strong></div>
+        <div class="hunting-note">기본 획득률 ${projection.baseAcquisitionRate}% + 추가 수치에 재획비 1.2배를 적용합니다. (${projection.baseAcquisitionRate}% + 드롭 ${projection.totalDrop}%) × ${projection.wealthPotionMultiplier} - ${projection.baseAcquisitionRate}% = 추가 드롭 ${projection.effectiveDrop.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%.</div>
         <div class="hunting-result"><span>정산 반영</span><strong>${settings.enabled ? "포함" : "미포함"}</strong></div>
         <div class="hunting-result"><span>일일 사냥 목표</span><strong>소재비 ${settings.dailyUnits}개 (${Math.floor(totalMinutes / 60)}시간 ${totalMinutes % 60}분) · 주 ${settings.weeklyDays}일 · 메제 ${projection.capRate.toFixed(1)}%</strong></div>
         <div class="hunting-result"><span>일일 사냥 마릿수</span><strong>${projection.huntingKills.toLocaleString("ko-KR")}마리 · ${Math.floor(totalMinutes / 60)}시간 ${totalMinutes % 60}분</strong></div>
